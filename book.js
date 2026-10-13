@@ -14,6 +14,8 @@
  *           合书全部复位。
  * 片尾：5 播放至最后约 1.6 秒时整屏渐黑，随后全屏播放 6（声音开关互通）；
  *       5 上点右页或向左拖动可手动提前进入 6，转场效果相同。
+ * 完整视频：6 播完出现"观看完整视频"按钮；封面页有"直接观看完整视频"入口；
+ *           完整视频全屏播放（声音开关互通），页面空闲时后台预加载。
  */
 (function () {
   'use strict';
@@ -36,6 +38,7 @@
   var N = PAGES.length;
   var FADE_IDX = N - 1;                       // 5 的索引（最后一张书页）
   var VIDEO6 = { src: 'assets/6.mp4', poster: 'assets/poster_6.jpg' };
+  var FULL   = { src: 'assets/full.mp4', poster: 'assets/poster_full.jpg' };
   var FADE_AHEAD = 1.6;                       // 5 结尾提前渐黑的秒数
 
   var book       = document.getElementById('book');
@@ -109,6 +112,7 @@
   /* ---------- 全局声音开关 + 渐黑层 + 全屏 6 ---------- */
   var soundOn = false;      // 3/4/5/6 有声页的全局开关：点一次开声，再点恢复静音
   var phase6  = false;      // 是否已进入全屏 6
+  var phaseFull = false;    // 是否正在全屏播放完整视频
   var ending5 = false;      // 5 是否已触发渐黑
 
   var muteBtn = document.createElement('button');
@@ -125,16 +129,49 @@
   document.body.appendChild(stage6);
   document.body.appendChild(muteBtn);
 
+  // 完整视频（全屏）：片尾 6 播完进入，或封面页直接观看
+  var stageFull = document.createElement('div');
+  stageFull.id = 'stageFull';
+  var videoFull = makeVideo(FULL.src, FULL.poster);
+  videoFull.preload = 'none';   // 页面空闲后后台预加载
+  stageFull.appendChild(videoFull);
+  document.body.appendChild(stageFull);
+
+  // 6 播完后：观看完整视频
+  var sixEnd = document.createElement('div');
+  sixEnd.className = 'video-end-overlay';
+  var sixEndBtn = document.createElement('button');
+  sixEndBtn.className = 'pill-btn';
+  sixEndBtn.textContent = '▶ 观看完整视频';
+  sixEnd.appendChild(sixEndBtn);
+  stage6.appendChild(sixEnd);
+
+  // 完整视频播完后：重新播放
+  var fullEnd = document.createElement('div');
+  fullEnd.className = 'video-end-overlay';
+  var fullEndBtn = document.createElement('button');
+  fullEndBtn.className = 'pill-btn';
+  fullEndBtn.textContent = '↻ 重新播放';
+  fullEnd.appendChild(fullEndBtn);
+  stageFull.appendChild(fullEnd);
+
+  // 封面入口：直接观看完整视频（不必翻完所有页）
+  var fullEntry = document.createElement('button');
+  fullEntry.id = 'fullEntry';
+  fullEntry.textContent = '▶ 直接观看完整视频';
+  document.body.appendChild(fullEntry);
+
   function syncMuteBtn() { muteBtn.textContent = soundOn ? '🔊' : '🔇'; }
-  // 位置：书页阶段锚定到摊开书页的右下角内（≈视频右下角），全屏 6 时固定屏幕右下角
+  // 位置：书页阶段锚定到摊开书页的右下角内（≈视频右下角），全屏时固定屏幕右下角
   function updateMuteVis() {
-    var show = phase6 || (mode === 'open' && !!PAGES[s].sound);
+    var show = phase6 || phaseFull || (mode === 'open' && !!PAGES[s].sound);
     muteBtn.classList.toggle('show', show);
+    fullEntry.classList.toggle('show', mode === 'closed');
     muteBtn.style.left = 'auto';
     muteBtn.style.right = 'auto';
     muteBtn.style.top = 'auto';
     muteBtn.style.bottom = 'auto';
-    if (phase6) {
+    if (phase6 || phaseFull) {
       muteBtn.style.right = '26px';
       muteBtn.style.bottom = '24px';
     } else {
@@ -151,6 +188,7 @@
       if (PAGES[k].sound) vBase[k].muted = !soundOn;
     });
     video6.muted = !soundOn;
+    videoFull.muted = !soundOn;
     syncMuteBtn();
   });
   syncMuteBtn();
@@ -198,6 +236,33 @@
     video6.load();       // 显式加载，避免 play() 与加载竞争被中断
     video6.muted = !soundOn;
     tryPlay(video6);
+    warmFull();          // 6 起播后开始后台预加载完整视频
+    updateMuteVis();
+  }
+
+  /* ---------- 完整视频（全屏） ---------- */
+  function warmFull() {
+    if (!phaseFull && videoFull.preload !== 'auto') {
+      videoFull.preload = 'auto';
+      videoFull.load();  // 后台静默缓冲，点击时多半已就绪
+    }
+  }
+  function openFull() {
+    if (phaseFull) return;
+    phaseFull = true;
+    mode = 'full';
+    pauseAll(false);
+    video6.pause();
+    fadeEl.classList.remove('on');
+    book.style.visibility = 'hidden';
+    dotsBox.classList.remove('show');
+    hint.classList.add('hidden');
+    stage6.classList.remove('show');
+    stageFull.classList.add('show');
+    videoFull.preload = 'auto';
+    videoFull.load();
+    videoFull.muted = !soundOn;
+    tryPlay(videoFull);
     updateMuteVis();
   }
   var v5 = vBase[FADE_IDX];
@@ -213,12 +278,47 @@
     v5.addEventListener('ended', function () { enter6(); });
   }
   video6.addEventListener('playing', function () {
+    sixEnd.classList.remove('show');
     setTimeout(function () { fadeEl.classList.remove('on'); }, 250);
   });
   video6.addEventListener('canplay', function () {
     if (phase6 && video6.paused && !video6.ended) tryPlay(video6);  // 兜底重试
   });
-  video6.addEventListener('ended', function () { video6.pause(); });  // 定格尾帧
+  video6.addEventListener('ended', function () {
+    video6.pause();                  // 定格尾帧
+    sixEnd.classList.add('show');    // 给出"观看完整视频"入口
+  });
+
+  // 6 播完 → 完整视频
+  sixEndBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    openFull();
+  });
+  // 封面页 → 直接观看完整视频（渐黑转场，与书内效果一致）
+  fullEntry.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (phaseFull) return;
+    fadeEl.classList.add('on');
+    setTimeout(openFull, 900);
+  });
+  // 完整视频播完 → 重新播放
+  fullEndBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    try { videoFull.currentTime = 0; } catch (err) {}
+    fullEnd.classList.remove('show');
+    tryPlay(videoFull);
+  });
+  videoFull.addEventListener('playing', function () {
+    fullEnd.classList.remove('show');
+    setTimeout(function () { fadeEl.classList.remove('on'); }, 250);
+  });
+  videoFull.addEventListener('canplay', function () {
+    if (phaseFull && videoFull.paused && !videoFull.ended) tryPlay(videoFull);
+  });
+  videoFull.addEventListener('ended', function () {
+    videoFull.pause();
+    fullEnd.classList.add('show');
+  });
 
   /* ---------- 页码指示点 ---------- */
   var dotEls = [];
@@ -381,6 +481,7 @@
       s = 0;
       setBaseContent(0);
       pauseAll(true);
+      updateMuteVis();   // 封面入口按钮重新出现
       hint.textContent = '轻点或向左拖动 · 翻开这本书';
       if (hasTurned) hint.classList.remove('hidden');
     });
@@ -539,6 +640,10 @@
   /* ---------- 初始化：预载全部封面图；视频只取 metadata，翻到才升级缓冲 ---------- */
   setBaseContent(0);
   renderCover(0);
+  updateMuteVis();
+  // 页面加载完空闲 1.5 秒后开始后台预加载完整视频
+  if (document.readyState === 'complete') setTimeout(warmFull, 1500);
+  else window.addEventListener('load', function () { setTimeout(warmFull, 1500); });
   PAGES.forEach(function (p) {
     var a = new Image(); a.src = p.poster;
     if (p.type === 'image') { var b = new Image(); b.src = p.src; }
@@ -602,6 +707,8 @@
 
   // ?six=1 直接进入全屏 6（调试用）
   if (qs.get('six') !== null) setTimeout(enter6, 500);
+  // ?full=1 直接进入完整视频（调试用）
+  if (qs.get('full') !== null) setTimeout(openFull, 500);
 
   // ?s=N&auto=1 自动执行一次真实翻页（auto=-1 回翻），用于复现收尾状态
   if (qs.get('auto') !== null) {
@@ -615,7 +722,7 @@
     setInterval(function () {
       document.title = 'm=' + mode + ' s=' + s + ' q=' + (turn ? turn.q.toFixed(2) : '-') +
         ' leaf=' + leaf.style.visibility + ' baseKids=' + baseSlot.children.length +
-        ' p6=' + phase6 +
+        ' p6=' + phase6 + ' pF=' + phaseFull +
         ' plays=' + JSON.stringify(window.__playLog);
     }, 200);
   }
