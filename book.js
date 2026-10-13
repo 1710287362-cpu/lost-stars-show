@@ -1,30 +1,41 @@
 /* ============ 《迷失的星星》翻书交互（真实叶片翻页 · 底层先切版） ============
- * 页面顺序：头图视频 → 0 → 1 → t1 → t2 → t3
+ * 页面顺序：头图视频 → 0 → 1 → t1 → t2 → t3 → 2 → t4 → t5 → t6 → 3 → 4 → 5 →【全屏 6】
  *
  * 封面：点击/左拖翻开；第一页点左半 = 合书
  * 翻页：右半页点击/左拖 = 下一页；左半页点击/右拖 = 上一页
- *   - 翻页开始：底层立即溶解到目标页（右半随叶片掀起直接露出下一页），
- *     目标页视频只在后台缓冲，画面由 poster/定格帧兜底
+ *   - 翻页开始：底层立即溶解到目标页（右半随叶片掀起直接露出下一页）
+ *   - 目标页视频只在后台缓冲，画面由 poster/定格帧兜底
  *   - 叶片正面 = 被掀起半页的定格封面（前翻=当前页右半，回翻=上一页右半）
  *   - 叶片背面 = 目标页对应半页封面，落下时与底层完全衔接
- *   - 翻页结束：叶片直接收走，无二次切换
+ *   - 翻页结束：叶片直接收走，目标页视频此时才开播
  *
- * 视频规则：到页自动静音播放，不循环、停尾帧；
- *           翻走暂停记忆进度，翻回继续；播完后再翻回则从开头重播；
+ * 视频规则：到页自动静音播放（3/4/5 有声、默认静音，右下角半透明静音键全局互通），
+ *           不循环、停尾帧；翻走暂停记忆进度，翻回继续；播完后再翻回则从开头重播；
  *           合书全部复位。
+ * 片尾：5 播放至最后约 1.6 秒时整屏渐黑，随后全屏播放 6（声音开关互通）。
  */
 (function () {
   'use strict';
 
   var PAGES = [
-    { type: 'video', src: 'assets/hero.mp4',   poster: 'assets/poster_hero.jpg' },
-    { type: 'video', src: 'assets/0.mp4',      poster: 'assets/poster_0.jpg'    },
-    { type: 'video', src: 'assets/1.mp4',      poster: 'assets/poster_1.jpg'    },
-    { type: 'image', src: 'assets/t1.webp',    poster: 'assets/t1.webp'         },
-    { type: 'image', src: 'assets/t2.webp',    poster: 'assets/t2.webp'         },
-    { type: 'image', src: 'assets/t3.webp',    poster: 'assets/t3.webp'         }
+    { type: 'video', src: 'assets/hero.mp4',  poster: 'assets/poster_hero.jpg' },
+    { type: 'video', src: 'assets/0.mp4',     poster: 'assets/poster_0.jpg'    },
+    { type: 'video', src: 'assets/1.mp4',     poster: 'assets/poster_1.jpg'    },
+    { type: 'image', src: 'assets/t1.webp',   poster: 'assets/t1.webp'         },
+    { type: 'image', src: 'assets/t2.webp',   poster: 'assets/t2.webp'         },
+    { type: 'image', src: 'assets/t3.webp',   poster: 'assets/t3.webp'         },
+    { type: 'video', src: 'assets/2.mp4',     poster: 'assets/poster_2.jpg'    },
+    { type: 'image', src: 'assets/t4.webp',   poster: 'assets/t4.webp'         },
+    { type: 'image', src: 'assets/t5.webp',   poster: 'assets/t5.webp'         },
+    { type: 'image', src: 'assets/t6.webp',   poster: 'assets/t6.webp'         },
+    { type: 'video', src: 'assets/3.mp4',     poster: 'assets/poster_3.jpg', sound: true },
+    { type: 'video', src: 'assets/4.mp4',     poster: 'assets/poster_4.jpg', sound: true },
+    { type: 'video', src: 'assets/5.mp4',     poster: 'assets/poster_5.jpg', sound: true, fadeout: true }
   ];
   var N = PAGES.length;
+  var FADE_IDX = N - 1;                       // 5 的索引（最后一张书页）
+  var VIDEO6 = { src: 'assets/6.mp4', poster: 'assets/poster_6.jpg' };
+  var FADE_AHEAD = 1.6;                       // 5 结尾提前渐黑的秒数
 
   var book       = document.getElementById('book');
   var spreadBase = document.getElementById('spreadBase');
@@ -44,7 +55,7 @@
     var v = document.createElement('video');
     v.src = src;
     if (poster) v.poster = poster;
-    v.preload = 'auto';
+    v.preload = 'metadata';   // 按需缓冲：翻到该页才升级为 auto
     v.playsInline = true;
     v.setAttribute('playsinline', '');
     v.setAttribute('muted', '');
@@ -94,6 +105,41 @@
   }
   spreadBase.appendChild(overlay);
 
+  /* ---------- 全局声音开关 + 渐黑层 + 全屏 6 ---------- */
+  var soundOn = false;      // 3/4/5/6 有声页的全局开关：点一次开声，再点恢复静音
+  var phase6  = false;      // 是否已进入全屏 6
+  var ending5 = false;      // 5 是否已触发渐黑
+
+  var muteBtn = document.createElement('button');
+  muteBtn.id = 'muteBtn';
+  muteBtn.setAttribute('aria-label', '声音开关');
+  var fadeEl = document.createElement('div');
+  fadeEl.id = 'fadeBlack';
+  var stage6 = document.createElement('div');
+  stage6.id = 'stage6';
+  var video6 = makeVideo(VIDEO6.src, VIDEO6.poster);
+  video6.preload = 'none';  // 进入全屏阶段才加载
+  stage6.appendChild(video6);
+  document.body.appendChild(fadeEl);
+  document.body.appendChild(stage6);
+  document.body.appendChild(muteBtn);
+
+  function syncMuteBtn() { muteBtn.textContent = soundOn ? '🔊' : '🔇'; }
+  function updateMuteVis() {
+    var show = phase6 || (mode === 'open' && !!PAGES[s].sound);
+    muteBtn.classList.toggle('show', show);
+  }
+  muteBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    soundOn = !soundOn;
+    Object.keys(vBase).forEach(function (k) {
+      if (PAGES[k].sound) vBase[k].muted = !soundOn;
+    });
+    video6.muted = !soundOn;
+    syncMuteBtn();
+  });
+  syncMuteBtn();
+
   PAGES.forEach(function (page, i) {
     var div = document.createElement('div');
     div.className = 'page-content';
@@ -114,6 +160,42 @@
     cloneImgs[i] = cim;
   });
 
+  /* ---------- 5 的渐黑 → 全屏 6 衔接 ---------- */
+  function enter6() {
+    if (phase6) return;
+    phase6 = true;
+    mode = 'six';
+    pauseAll(false);
+    book.style.visibility = 'hidden';
+    dotsBox.classList.remove('show');
+    hint.classList.add('hidden');
+    stage6.classList.add('show');
+    video6.preload = 'auto';
+    video6.load();       // 显式加载，避免 play() 与加载竞争被中断
+    video6.muted = !soundOn;
+    tryPlay(video6);
+    updateMuteVis();
+  }
+  var v5 = vBase[FADE_IDX];
+  if (v5) {
+    // 播放到尾声时整屏渐黑，给全屏 6 做转场
+    v5.addEventListener('timeupdate', function () {
+      if (phase6 || v5.paused || !v5.duration) return;
+      if (!ending5 && v5.duration - v5.currentTime <= FADE_AHEAD) {
+        ending5 = true;
+        fadeEl.classList.add('on');
+      }
+    });
+    v5.addEventListener('ended', function () { enter6(); });
+  }
+  video6.addEventListener('playing', function () {
+    setTimeout(function () { fadeEl.classList.remove('on'); }, 250);
+  });
+  video6.addEventListener('canplay', function () {
+    if (phase6 && video6.paused && !video6.ended) tryPlay(video6);  // 兜底重试
+  });
+  video6.addEventListener('ended', function () { video6.pause(); });  // 定格尾帧
+
   /* ---------- 页码指示点 ---------- */
   var dotEls = [];
   for (var i = 0; i < N; i++) {
@@ -126,21 +208,39 @@
   }
 
   /* ---------- 状态 ---------- */
-  var mode = 'closed';    // closed | opening | open | turning | closing
+  var mode = 'closed';    // closed | opening | open | turning | closing | six
   var pc = 0;             // 封面开合 0..1
   var s = 0;              // 当前页索引
   var turn = null;        // {dir, from, to, q}
   var hasTurned = false;
 
   /* ---------- 视频控制 ---------- */
+  // 有声播放被浏览器自动播放策略拦截时：退回静音播，并同步回静音状态
+  function tryPlay(v) {
+    var pr = v.play();
+    if (pr && pr.catch) pr.catch(function () {
+      if (!v.muted) {
+        v.muted = true;
+        var pr2 = v.play();
+        if (pr2 && pr2.catch) pr2.catch(function () {});
+        soundOn = false;
+        syncMuteBtn();
+      }
+    });
+  }
   function playBase(i) {
     var v = vBase[i];
     if (!v) return;
     if (v.ended) { try { v.currentTime = 0; } catch (e) {} }
-    var pr = v.play();
-    if (pr && pr.catch) pr.catch(function () {});
+    v.muted = !(PAGES[i].sound && soundOn);
+    tryPlay(v);
   }
   function pauseBase(i) { var v = vBase[i]; if (v) v.pause(); }
+  // 按需升级缓冲：翻到该页（或开书到该页）时才开始拉视频数据
+  function warmBase(i) {
+    var v = vBase[i];
+    if (v && v.preload !== 'auto') { v.preload = 'auto'; v.load(); }
+  }
 
   // 视频页当前帧快照（作为叶片正面封面，与底层画面衔接）
   function snapshotFor(i) {
@@ -232,11 +332,13 @@
     if (mode !== 'closed') return;
     mode = 'opening';
     setBaseContent(s);
+    warmBase(s);
     animateCover(1, 1250, function () {
       mode = 'open';
       renderIdle();
       cover.style.opacity = '0';
       playBase(s);
+      updateMuteVis();
       dotsBox.classList.add('show');
       updateDots(s);
       hint.textContent = '点击右页 · 翻下一页　｜　点击左页 · 返回';
@@ -247,6 +349,7 @@
     if (mode !== 'open') return;
     mode = 'closing';
     pauseAll(false);
+    updateMuteVis();
     cover.style.opacity = '';
     dotsBox.classList.remove('show');
     animateCover(0, 1100, function () {
@@ -307,11 +410,11 @@
       cloneImgs[from].src = snapshotFor(from);
     }
     pauseBase(from);
+    if (from === FADE_IDX) { ending5 = false; fadeEl.classList.remove('on'); }
 
     // 底层立刻溶解到目标页：被叶片掀起的那半页下直接露出目标页内容
     crossfadeBase(contents[from], contents[to], 200);
-    // 目标页视频此刻不播放：preload='auto' 让数据在后台持续缓冲，
-    // 未加载完的画面由 poster 兜底，等叶片完全落下后在 finishTurn 中开播
+    warmBase(to);        // 目标页视频后台缓冲，画面由 poster/定格帧兜底
     updateDots(to);
     // 另一半页先用旧页面盖住，等翻页 70% 左右再淡出（左右互不串味）
     ovImg.src = PAGES[from].type === 'video' ? snapshotFor(from) : PAGES[from].poster;
@@ -354,6 +457,8 @@
     if (clones[to].parentNode) pool.appendChild(clones[to]);
     pauseBase(from);
     playBase(to);        // 翻页动画完全结束后，目标页视频才开播
+    if (to === FADE_IDX) { ending5 = false; fadeEl.classList.remove('on'); }
+    updateMuteVis();
     renderIdle();
     s = to;
     turn = null;
@@ -404,13 +509,12 @@
   book.addEventListener('pointercancel', endDrag);
   book.addEventListener('dragstart', function (e) { e.preventDefault(); });
 
-  /* ---------- 初始化：预载视频 + 全部封面图 ---------- */
+  /* ---------- 初始化：预载全部封面图；视频只取 metadata，翻到才升级缓冲 ---------- */
   setBaseContent(0);
   renderCover(0);
-  Object.keys(vBase).forEach(function (k) { vBase[k].load(); });
   PAGES.forEach(function (p) {
     var a = new Image(); a.src = p.poster;
-    var b = new Image(); b.src = p.src;
+    if (p.type === 'image') { var b = new Image(); b.src = p.src; }
   });
 
   /* ---------- 调试参数 ---------- */
@@ -429,6 +533,7 @@
     dotsBox.classList.add('show');
     updateDots(s);
     hint.classList.add('hidden');
+    updateMuteVis();
     if (qs.get('turn') !== null) {
       var q = Math.min(1, Math.max(0, parseFloat(qs.get('turn')) || 0));
       var toF = Math.min(N - 1, s + 1);
@@ -468,6 +573,9 @@
     }
   }
 
+  // ?six=1 直接进入全屏 6（调试用）
+  if (qs.get('six') !== null) setTimeout(enter6, 500);
+
   // ?s=N&auto=1 自动执行一次真实翻页（auto=-1 回翻），用于复现收尾状态
   if (qs.get('auto') !== null) {
     var dirA = parseInt(qs.get('auto'), 10) || 1;
@@ -480,6 +588,7 @@
     setInterval(function () {
       document.title = 'm=' + mode + ' s=' + s + ' q=' + (turn ? turn.q.toFixed(2) : '-') +
         ' leaf=' + leaf.style.visibility + ' baseKids=' + baseSlot.children.length +
+        ' p6=' + phase6 +
         ' plays=' + JSON.stringify(window.__playLog);
     }, 200);
   }
