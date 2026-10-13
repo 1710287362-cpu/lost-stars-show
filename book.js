@@ -817,7 +817,7 @@
   var SWAP_Q = 0.7;         // 遮盖半页的淡出点：叶片扫过 70% 时新旧页面交接
 
   function animateLeaf() {
-    var start = performance.now(), dur = turn.quick ? 230 : 850;
+    var start = performance.now(), dur = turn.quick ? 140 : 850;
     function tick(now) {
       var t = Math.min(1, (now - start) / dur);
       turn.q = easeInOutCubic(t);
@@ -875,7 +875,7 @@
     if (s === flipTarget) { flipping = false; flipTarget = null; return; }
     var dir = flipTarget > s ? 1 : -1;
     var last = (s + dir === flipTarget);   // 最后一步正常速度落下并开播视频
-    startTurn(dir, function () { setTimeout(stepFlip, 30); }, !last);
+    startTurn(dir, function () { setTimeout(stepFlip, 15); }, !last);
   }
 
   /* ---------- 交互：点击 + 拖动 ---------- */
