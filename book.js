@@ -22,18 +22,18 @@
 
   var PAGES = [
     { type: 'video', src: 'assets/hero.mp4',  poster: 'assets/poster_hero.jpg' },
-    { type: 'video', src: 'assets/0.mp4',     poster: 'assets/poster_0.jpg'    },
-    { type: 'video', src: 'assets/1.mp4',     poster: 'assets/poster_1.jpg'    },
+    { type: 'video', src: 'assets/0.mp4?v=2',     poster: 'assets/poster_0.jpg'    },
+    { type: 'video', src: 'assets/1.mp4?v=2',     poster: 'assets/poster_1.jpg'    },
     { type: 'image', src: 'assets/t1.webp',   poster: 'assets/t1.webp'         },
     { type: 'image', src: 'assets/t2.webp',   poster: 'assets/t2.webp'         },
     { type: 'image', src: 'assets/t3.webp',   poster: 'assets/t3.webp'         },
-    { type: 'video', src: 'assets/2.mp4',     poster: 'assets/poster_2.jpg'    },
+    { type: 'video', src: 'assets/2.mp4?v=2',     poster: 'assets/poster_2.jpg'    },
     { type: 'image', src: 'assets/t4.webp',   poster: 'assets/t4.webp'         },
     { type: 'image', src: 'assets/t5.webp',   poster: 'assets/t5.webp'         },
     { type: 'image', src: 'assets/t6.webp',   poster: 'assets/t6.webp'         },
-    { type: 'video', src: 'assets/3.mp4',     poster: 'assets/poster_3.jpg', sound: true },
-    { type: 'video', src: 'assets/4.mp4',     poster: 'assets/poster_4.jpg', sound: true },
-    { type: 'video', src: 'assets/5.mp4',     poster: 'assets/poster_5.jpg', sound: true, fadeout: true }
+    { type: 'video', src: 'assets/3.mp4?v=2',     poster: 'assets/poster_3.jpg', sound: true },
+    { type: 'video', src: 'assets/4.mp4?v=2',     poster: 'assets/poster_4.jpg', sound: true },
+    { type: 'video', src: 'assets/5.mp4?v=2',     poster: 'assets/poster_5.jpg', sound: true, fadeout: true }
   ];
   var N = PAGES.length;
   var FADE_IDX = N - 1;                       // 5 的索引（最后一张书页）
