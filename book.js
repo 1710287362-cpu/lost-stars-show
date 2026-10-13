@@ -38,7 +38,7 @@
   var N = PAGES.length;
   var FADE_IDX = N - 1;                       // 5 的索引（最后一张书页）
   var VIDEO6 = { src: 'assets/6.mp4', poster: 'assets/poster_6.jpg' };
-  var FULL   = { src: 'assets/full.mp4', poster: 'assets/poster_full.jpg' };
+  var FULL   = { src: 'assets/full.mp4?v=2', poster: 'assets/poster_full.jpg' };
   var FADE_AHEAD = 1.6;                       // 5 结尾提前渐黑的秒数
 
   var book       = document.getElementById('book');
@@ -161,6 +161,38 @@
   fsLoad.appendChild(document.createElement('i'));
   stageFull.appendChild(fsLoad);
 
+  // B 站式播放控制条（仅完整视频）：播放/暂停 · 进度（可点可拖）· 时间 · 静音 · 全屏
+  var fullCtl = document.createElement('div');
+  fullCtl.id = 'fullCtl';
+  var ctlPlay = document.createElement('button');
+  ctlPlay.className = 'fctl-btn';
+  ctlPlay.textContent = '▶';
+  var ctlTime = document.createElement('span');
+  ctlTime.className = 'fctl-time';
+  ctlTime.textContent = '0:00 / 0:00';
+  var fprog = document.createElement('div');
+  fprog.className = 'fprog';
+  var fbuf = document.createElement('div');
+  fbuf.className = 'fprog-buf';
+  var ffill = document.createElement('div');
+  ffill.className = 'fprog-fill';
+  var fknob = document.createElement('div');
+  fknob.className = 'fprog-knob';
+  fprog.appendChild(fbuf);
+  fprog.appendChild(ffill);
+  fprog.appendChild(fknob);
+  var ctlMute = document.createElement('button');
+  ctlMute.className = 'fctl-btn';
+  var ctlFs = document.createElement('button');
+  ctlFs.className = 'fctl-btn';
+  ctlFs.textContent = '⛶';
+  fullCtl.appendChild(ctlPlay);
+  fullCtl.appendChild(ctlTime);
+  fullCtl.appendChild(fprog);
+  fullCtl.appendChild(ctlMute);
+  fullCtl.appendChild(ctlFs);
+  stageFull.appendChild(fullCtl);
+
   // 封面入口：直接观看完整视频（不必翻完所有页）
   var fullEntry = document.createElement('button');
   fullEntry.id = 'fullEntry';
@@ -170,7 +202,7 @@
   function syncMuteBtn() { muteBtn.textContent = soundOn ? '🔊' : '🔇'; }
   // 位置：书页阶段锚定到摊开书页的右下角内（≈视频右下角），全屏时固定屏幕右下角
   function updateMuteVis() {
-    var show = phase6 || phaseFull || (mode === 'open' && !!PAGES[s].sound);
+    var show = !phaseFull && (phase6 || (mode === 'open' && !!PAGES[s].sound));
     muteBtn.classList.toggle('show', show);
     fullEntry.classList.toggle('show', mode === 'closed');
     muteBtn.style.left = 'auto';
@@ -189,13 +221,7 @@
   window.addEventListener('resize', updateMuteVis);
   muteBtn.addEventListener('click', function (e) {
     e.stopPropagation();
-    soundOn = !soundOn;
-    Object.keys(vBase).forEach(function (k) {
-      if (PAGES[k].sound) vBase[k].muted = !soundOn;
-    });
-    video6.muted = !soundOn;
-    videoFull.muted = !soundOn;
-    syncMuteBtn();
+    setSound(!soundOn);
   });
   syncMuteBtn();
 
@@ -274,8 +300,109 @@
     videoFull.muted = !soundOn;
     fsLoad.classList.add('show');
     tryPlay(videoFull);
+    pokeCtl();
     updateMuteVis();
   }
+
+  /* ---------- 全局声音开关（静音键与控制条互通） ---------- */
+  function setSound(on) {
+    soundOn = on;
+    Object.keys(vBase).forEach(function (k) {
+      if (PAGES[k].sound) vBase[k].muted = !on;
+    });
+    video6.muted = !on;
+    videoFull.muted = !on;
+    syncMuteBtn();
+    syncVolIcon();
+  }
+  function syncVolIcon() { ctlMute.textContent = soundOn ? '🔊' : '🔇'; }
+  syncVolIcon();
+
+  /* ---------- 完整视频播放控制条 ---------- */
+  function fmtT(t) {
+    t = Math.max(0, Math.floor(t || 0));
+    var m = Math.floor(t / 60), s = t % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function syncCtlTime() {
+    ctlTime.textContent = fmtT(videoFull.currentTime) + ' / ' + fmtT(videoFull.duration);
+  }
+  function syncProg(previewP) {
+    var p = previewP != null ? previewP :
+      (videoFull.duration ? videoFull.currentTime / videoFull.duration : 0);
+    p = Math.min(1, Math.max(0, p));
+    ffill.style.width = (p * 100).toFixed(2) + '%';
+    fknob.style.left = (p * 100).toFixed(2) + '%';
+    try {
+      if (videoFull.buffered.length && videoFull.duration) {
+        fbuf.style.width = (videoFull.buffered.end(videoFull.buffered.length - 1) /
+          videoFull.duration * 100).toFixed(2) + '%';
+      }
+    } catch (e) {}
+  }
+  function syncPlayIcon() {
+    ctlPlay.textContent = (videoFull.paused || videoFull.ended) ? '▶' : '❚❚';
+  }
+  function toggleFullPlay() {
+    if (videoFull.ended) {
+      try { videoFull.currentTime = 0; } catch (e) {}
+      fullEnd.classList.remove('show');
+    }
+    if (videoFull.paused) { videoFull.muted = !soundOn; tryPlay(videoFull); }
+    else videoFull.pause();
+  }
+  ctlPlay.addEventListener('click', function (e) { e.stopPropagation(); toggleFullPlay(); });
+  ctlMute.addEventListener('click', function (e) { e.stopPropagation(); setSound(!soundOn); });
+  ctlFs.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (document.fullscreenElement) { document.exitFullscreen(); }
+    else if (stageFull.requestFullscreen) { stageFull.requestFullscreen(); }
+  });
+  videoFull.addEventListener('click', function (e) { e.stopPropagation(); toggleFullPlay(); });
+
+  // 进度条：点击/拖动跳转
+  var seeking = false;
+  function progPos(clientX) {
+    var r = fprog.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+  }
+  fprog.addEventListener('pointerdown', function (e) {
+    e.stopPropagation();
+    seeking = true;
+    fprog.setPointerCapture(e.pointerId);
+    syncProg(progPos(e.clientX));
+  });
+  fprog.addEventListener('pointermove', function (e) {
+    if (seeking) syncProg(progPos(e.clientX));
+  });
+  fprog.addEventListener('pointerup', function (e) {
+    if (!seeking) return;
+    seeking = false;
+    var p = progPos(e.clientX);
+    if (videoFull.duration) { try { videoFull.currentTime = p * videoFull.duration; } catch (err) {} }
+    syncProg();
+    syncCtlTime();
+  });
+  videoFull.addEventListener('timeupdate', function () {
+    if (!seeking) syncProg();
+    syncCtlTime();
+    syncPlayIcon();
+  });
+  videoFull.addEventListener('progress', function () { syncProg(); });
+  videoFull.addEventListener('play', syncPlayIcon);
+  videoFull.addEventListener('pause', syncPlayIcon);
+
+  // 控制条自动隐藏：播放时 3 秒无操作隐藏，暂停/结束时常驻
+  var ctlTimer = null;
+  function pokeCtl() {
+    fullCtl.classList.add('show');
+    if (ctlTimer) clearTimeout(ctlTimer);
+    if (!videoFull.paused && !videoFull.ended) {
+      ctlTimer = setTimeout(function () { fullCtl.classList.remove('show'); }, 3000);
+    }
+  }
+  stageFull.addEventListener('mousemove', pokeCtl);
+  stageFull.addEventListener('touchstart', pokeCtl, { passive: true });
   var v5 = vBase[FADE_IDX];
   if (v5) {
     // 播放到尾声时整屏渐黑，给全屏 6 做转场
@@ -322,6 +449,8 @@
   videoFull.addEventListener('playing', function () {
     fullEnd.classList.remove('show');
     fsLoad.classList.remove('show');
+    syncPlayIcon();
+    pokeCtl();
     setTimeout(function () { fadeEl.classList.remove('on'); }, 250);
   });
   videoFull.addEventListener('canplay', function () {
@@ -331,6 +460,10 @@
     videoFull.pause();
     fsLoad.classList.remove('show');
     fullEnd.classList.add('show');
+    fullCtl.classList.add('show');   // 结束时常驻控制条
+    syncPlayIcon();
+    syncCtlTime();
+    syncProg();
   });
   // 网络错误自动重试（最多 3 次）
   videoFull.addEventListener('error', function () {

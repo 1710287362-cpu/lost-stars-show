@@ -391,6 +391,102 @@ html, body {
 }
 @keyframes fs-spin { to { transform: rotate(360deg); } }
 
+/* ---------- 完整视频播放控制条（B 站式） ---------- */
+#fullCtl {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 18px 12px;
+  background: linear-gradient(to top, rgba(0, 0, 0, .78), rgba(0, 0, 0, 0));
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .3s ease, visibility .3s ease;
+}
+#fullCtl.show { opacity: 1; visibility: visible; }
+.fctl-btn {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #e8dcc0;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .2s ease;
+}
+.fctl-btn:hover { background: rgba(255, 255, 255, .12); }
+.fctl-time {
+  flex: none;
+  color: #e8dcc0;
+  font-size: 12px;
+  font-family: Consolas, "Courier New", monospace;
+  opacity: .85;
+  min-width: 92px;
+  text-align: center;
+}
+.fprog {
+  position: relative;
+  flex: 1;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.fprog::before {           /* 轨道底 */
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, .22);
+}
+.fprog-buf {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, .38);
+  width: 0;
+}
+.fprog-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 2px;
+  background: #d8b97a;
+  width: 0;
+}
+.fprog-knob {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  margin: -6.5px 0 0 -6.5px;
+  border-radius: 50%;
+  background: #e8dcc0;
+  box-shadow: 0 0 4px rgba(0, 0, 0, .6);
+  transform: scale(.6);
+  opacity: .7;
+  transition: transform .15s ease, opacity .15s ease;
+}
+.fprog:hover .fprog-knob,
+.fprog:active .fprog-knob { transform: scale(1); opacity: 1; }
+
 /* ---------- 全屏视频播完后的按钮层 ---------- */
 .video-end-overlay {
   position: absolute;
