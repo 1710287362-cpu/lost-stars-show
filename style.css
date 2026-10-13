@@ -301,24 +301,24 @@ html, body {
 /* ---------- 声音开关（3/4/5/6 全局互通） ---------- */
 #muteBtn {
   position: fixed;
-  right: 26px;
+  left: 26px;
   bottom: 24px;
   z-index: 60;
-  width: 46px;
-  height: 46px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, .22);
-  background: rgba(20, 14, 8, .38);
+  border: 1px solid rgba(255, 255, 255, .28);
+  background: rgba(20, 14, 8, .48);
   color: #e8dcc0;
-  font-size: 19px;
+  font-size: 21px;
   line-height: 1;
   cursor: pointer;
   opacity: 0;
   visibility: hidden;
   transition: opacity .35s ease, background .25s ease, transform .15s ease;
 }
-#muteBtn.show { opacity: .6; visibility: visible; }
-#muteBtn.show:hover { opacity: .92; background: rgba(40, 28, 16, .55); }
+#muteBtn.show { opacity: .78; visibility: visible; }
+#muteBtn.show:hover { opacity: .96; background: rgba(40, 28, 16, .6); }
 #muteBtn:active { transform: scale(.93); }
 
 /* ---------- 渐黑过渡层（5 的结尾 → 全屏 6） ---------- */
