@@ -212,12 +212,50 @@
   fullEntry.textContent = '▶ 直接观看完整视频';
   document.body.appendChild(fullEntry);
 
+  /* ---------- 底部快速翻页条：缩略图直达 + 加速翻页效果 ---------- */
+  var navBar = document.createElement('div');
+  navBar.id = 'navBar';
+  var navPrev = document.createElement('button');
+  navPrev.className = 'nav-arrow';
+  navPrev.textContent = '‹';
+  navPrev.setAttribute('aria-label', '上一页');
+  var navNext = document.createElement('button');
+  navNext.className = 'nav-arrow';
+  navNext.textContent = '›';
+  navNext.setAttribute('aria-label', '下一页');
+  var navThumbs = document.createElement('div');
+  navThumbs.id = 'navThumbs';
+  var navImgs = [];
+  PAGES.forEach(function (p, i) {
+    var im = makeImg(p.poster);
+    im.addEventListener('click', function (e) {
+      e.stopPropagation();
+      flipTo(i);
+    });
+    navThumbs.appendChild(im);
+    navImgs.push(im);
+  });
+  navBar.appendChild(navPrev);
+  navBar.appendChild(navThumbs);
+  navBar.appendChild(navNext);
+  document.body.appendChild(navBar);
+  navPrev.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (mode === 'open') startTurn(-1);
+  });
+  navNext.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (mode === 'open') startTurn(1);
+  });
+
   function syncMuteBtn() { muteBtn.textContent = soundOn ? '🔊' : '🔇'; }
   // 位置：书页阶段锚定到摊开书页的右下角内（≈视频右下角），全屏时固定屏幕右下角
   function updateMuteVis() {
     var show = !phaseFull && (phase6 || (mode === 'open' && !!PAGES[s].sound));
     muteBtn.classList.toggle('show', show);
     fullEntry.classList.toggle('show', mode === 'closed');
+    navBar.classList.toggle('show', !phase6 && !phaseFull &&
+      (mode === 'open' || mode === 'turning'));
     muteBtn.style.left = 'auto';
     muteBtn.style.right = 'auto';
     muteBtn.style.top = 'auto';
@@ -544,6 +582,7 @@
   }
   function updateDots(idx) {
     dotEls.forEach(function (el, k) { el.classList.toggle('on', k === idx); });
+    navImgs.forEach(function (im, k) { im.classList.toggle('on', k === idx); });
   }
 
   /* ---------- 状态 ---------- */
@@ -725,7 +764,8 @@
   }
 
   /* ---------- 翻页 ---------- */
-  function startTurn(dir) {
+  // chain：翻完后的回调（快速连翻用）；quick=true 时加速动画、跳过半页遮盖
+  function startTurn(dir, chain, quick) {
     if (mode !== 'open') return;
     var to = s + dir;
     if (dir > 0 && to > N - 1) {                     // 最后一页再往前 = 手动进入片尾全屏 6
@@ -735,7 +775,7 @@
     if (dir < 0 && to < 0) { closeBook(); return; }  // 首页向左 = 合书
     mode = 'turning';
     var from = s;
-    turn = { dir: dir, from: from, to: to, q: 0 };
+    turn = { dir: dir, from: from, to: to, q: 0, quick: !!quick, chain: chain || null };
 
     // 叶片固定在中线右侧、绕书脊翻转；回翻只是同一动画反向播放
     leaf.style.left = '50%';
@@ -760,9 +800,14 @@
     warmBase(to);        // 目标页视频后台缓冲，画面由 poster/定格帧兜底
     updateDots(to);
     // 另一半页先用旧页面盖住，等翻页 70% 左右再淡出（左右互不串味）
-    ovImg.src = PAGES[from].type === 'video' ? snapshotFor(from) : PAGES[from].poster;
-    showOverlay(dir);
-    turn.ovHidden = false;
+    // 快速连翻时跳过遮盖：速度太快，直接整体切换更有"哗哗翻书"感
+    if (!quick) {
+      ovImg.src = PAGES[from].type === 'video' ? snapshotFor(from) : PAGES[from].poster;
+      showOverlay(dir);
+      turn.ovHidden = false;
+    } else {
+      turn.ovHidden = true;
+    }
 
     leaf.style.visibility = 'visible';
     renderLeaf();
@@ -772,7 +817,7 @@
   var SWAP_Q = 0.7;         // 遮盖半页的淡出点：叶片扫过 70% 时新旧页面交接
 
   function animateLeaf() {
-    var start = performance.now(), dur = 850;
+    var start = performance.now(), dur = turn.quick ? 230 : 850;
     function tick(now) {
       var t = Math.min(1, (now - start) / dur);
       turn.q = easeInOutCubic(t);
@@ -788,7 +833,7 @@
   }
 
   function finishTurn() {
-    var from = turn.from, to = turn.to;
+    var from = turn.from, to = turn.to, chain = turn.chain;
     if (!turn.ovHidden) hideOverlay();   // 兜底
     // 底层已切到目标页，叶片两面内容与之完全衔接，直接收走
     leaf.style.visibility = 'hidden';
@@ -808,6 +853,29 @@
     updateDots(s);
     updateMuteVis();     // 必须在 s/mode 更新之后调用
     if (!hasTurned) { hasTurned = true; hint.classList.add('hidden'); }
+    // 快速连翻：到达目标页收工，否则继续下一步
+    if (flipTarget != null && s === flipTarget) { flipping = false; flipTarget = null; }
+    if (chain) setTimeout(chain, 40);
+  }
+
+  /* ---------- 快速翻页：底部缩略图直达，中间页加速连翻 ---------- */
+  var flipping = false, flipTarget = null;
+  function flipTo(idx) {
+    if (phase6 || phaseFull) return;
+    if (idx === s) return;
+    if (mode !== 'open' && mode !== 'turning') return;
+    flipTarget = idx;
+    if (!flipping) {
+      flipping = true;
+      stepFlip();
+    }
+  }
+  function stepFlip() {
+    if (flipTarget == null) { flipping = false; return; }
+    if (s === flipTarget) { flipping = false; flipTarget = null; return; }
+    var dir = flipTarget > s ? 1 : -1;
+    var last = (s + dir === flipTarget);   // 最后一步正常速度落下并开播视频
+    startTurn(dir, function () { setTimeout(stepFlip, 30); }, !last);
   }
 
   /* ---------- 交互：点击 + 拖动 ---------- */

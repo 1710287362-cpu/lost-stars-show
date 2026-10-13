@@ -508,6 +508,62 @@ html, body {
 .fs-exit:hover { opacity: .95; background: rgba(40, 28, 16, .6); }
 .fs-exit:active { transform: scale(.92); }
 
+/* ---------- 底部快速翻页条 ---------- */
+#navBar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 12px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: 14px;
+  background: rgba(16, 11, 6, .55);
+  border: 1px solid rgba(232, 220, 192, .18);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .35s ease, visibility .35s ease;
+  max-width: 94vw;
+}
+#navBar.show { opacity: 1; visibility: visible; }
+#navBar .nav-arrow {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(232, 220, 192, .3);
+  background: rgba(20, 14, 8, .5);
+  color: #e8dcc0;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .2s ease;
+}
+#navBar .nav-arrow:hover { background: rgba(60, 44, 24, .75); }
+#navThumbs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  max-width: 66vw;
+  padding: 2px;
+  scrollbar-width: thin;
+}
+#navThumbs img {
+  flex: none;
+  width: 46px;
+  height: 31px;
+  object-fit: cover;
+  border-radius: 4px;
+  opacity: .55;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: opacity .2s ease, border-color .2s ease;
+}
+#navThumbs img:hover { opacity: .9; }
+#navThumbs img.on { opacity: 1; border-color: #d8b97a; }
+
 /* ---------- 全屏视频播完后的按钮层 ---------- */
 .video-end-overlay {
   position: absolute;
