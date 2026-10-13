@@ -217,7 +217,13 @@
   function updateMuteVis() {
     var show = !phaseFull && (phase6 || (mode === 'open' && !!PAGES[s].sound));
     muteBtn.classList.toggle('show', show);
-    fullEntry.classList.toggle('show', mode === 'closed');
+    var entryOn = mode === 'closed';
+    fullEntry.classList.toggle('show', entryOn);
+    if (entryOn) { coverWake(); }
+    else {
+      fullEntry.classList.remove('vis');
+      if (coverTimer) clearTimeout(coverTimer);
+    }
     muteBtn.style.left = 'auto';
     muteBtn.style.right = 'auto';
     muteBtn.style.top = 'auto';
@@ -232,6 +238,18 @@
     }
   }
   window.addEventListener('resize', updateMuteVis);
+  // 封面入口自动隐藏：出现后 5 秒淡出，鼠标移动/触摸时唤回
+  var coverTimer = null;
+  function coverWake() {
+    if (mode !== 'closed') return;
+    fullEntry.classList.add('vis');
+    if (coverTimer) clearTimeout(coverTimer);
+    coverTimer = setTimeout(function () {
+      fullEntry.classList.remove('vis');
+    }, 5000);
+  }
+  document.addEventListener('mousemove', coverWake);
+  document.addEventListener('touchstart', coverWake, { passive: true });
   muteBtn.addEventListener('click', function (e) {
     e.stopPropagation();
     setSound(!soundOn);

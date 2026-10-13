@@ -556,8 +556,8 @@ html, body {
   visibility: hidden;
   transition: opacity .4s ease, background .25s ease;
 }
-#fullEntry.show { opacity: .85; visibility: visible; }
-#fullEntry.show:hover { opacity: 1; background: rgba(50, 36, 20, .65); }
+#fullEntry.show.vis { opacity: .85; visibility: visible; }
+#fullEntry.show.vis:hover { opacity: 1; background: rgba(50, 36, 20, .65); }
 #fullEntry:active { transform: translateX(-50%) scale(.96); }
 
 /* 小屏适配 */
