@@ -144,7 +144,7 @@ html, body {
 .leaf-paper {
   position: absolute;
   inset: 0;
-  background-image: url("assets/pages_trim.png");
+  background-image: url("assets/pages_trim.webp");
   background-repeat: no-repeat;
   background-size: 200% auto;      /* 以叶片宽度为半幅，撑满整书宽度 */
 }
@@ -188,7 +188,7 @@ html, body {
 .half-overlay .ov-paper {
   position: absolute;
   inset: 0;
-  background-image: url("assets/pages_trim.png");
+  background-image: url("assets/pages_trim.webp");
   background-repeat: no-repeat;
   background-size: 200% auto;
 }
