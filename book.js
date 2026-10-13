@@ -239,6 +239,18 @@
   navBar.appendChild(navThumbs);
   navBar.appendChild(navNext);
   document.body.appendChild(navBar);
+  // 书页打开后常驻：观看完整视频（位于翻页条上方居中，渐黑转场进入）
+  var fullEntryOpen = document.createElement('button');
+  fullEntryOpen.id = 'fullEntryOpen';
+  fullEntryOpen.textContent = '▶ 观看完整视频';
+  document.body.appendChild(fullEntryOpen);
+  fullEntryOpen.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (phaseFull) return;
+    fullFrom = 'page';
+    fadeEl.classList.add('on');
+    setTimeout(openFull, 900);
+  });
   navPrev.addEventListener('click', function (e) {
     e.stopPropagation();
     if (mode === 'open') startTurn(-1);
@@ -255,6 +267,8 @@
     muteBtn.classList.toggle('show', show);
     fullEntry.classList.toggle('show', mode === 'closed');
     navBar.classList.toggle('show', !phase6 && !phaseFull &&
+      (mode === 'open' || mode === 'turning'));
+    fullEntryOpen.classList.toggle('show', !phase6 && !phaseFull &&
       (mode === 'open' || mode === 'turning'));
     muteBtn.style.left = 'auto';
     muteBtn.style.right = 'auto';

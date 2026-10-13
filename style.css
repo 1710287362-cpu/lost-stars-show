@@ -528,6 +528,26 @@ html, body {
   max-width: 94vw;
 }
 #navBar.show { opacity: 1; visibility: visible; }
+#fullEntryOpen {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 70px;
+  z-index: 25;
+  padding: 9px 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(232, 220, 192, .35);
+  background: rgba(16, 11, 6, .6);
+  color: #e8dcc0;
+  font-size: 14px;
+  letter-spacing: .05em;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .3s ease, visibility .3s, background .2s ease;
+}
+#fullEntryOpen.show { opacity: 1; visibility: visible; }
+#fullEntryOpen:hover { background: rgba(60, 44, 24, .8); }
 #navBar .nav-arrow {
   flex: none;
   width: 30px;
