@@ -12,7 +12,8 @@
  * 视频规则：到页自动静音播放（3/4/5 有声、默认静音，右下角半透明静音键全局互通），
  *           不循环、停尾帧；翻走暂停记忆进度，翻回继续；播完后再翻回则从开头重播；
  *           合书全部复位。
- * 片尾：5 播放至最后约 1.6 秒时整屏渐黑，随后全屏播放 6（声音开关互通）。
+ * 片尾：5 播放至最后约 1.6 秒时整屏渐黑，随后全屏播放 6（声音开关互通）；
+ *       5 上点右页或向左拖动可手动提前进入 6，转场效果相同。
  */
 (function () {
   'use strict';
@@ -161,6 +162,15 @@
   });
 
   /* ---------- 5 的渐黑 → 全屏 6 衔接 ---------- */
+  // 手动从 5 翻到 6：渐黑后进入全屏（转场效果与自动衔接一致）
+  function startEnding() {
+    if (phase6 || ending5) return;
+    ending5 = true;
+    var v = vBase[FADE_IDX];
+    if (v) v.pause();
+    fadeEl.classList.add('on');
+    setTimeout(enter6, 1300);
+  }
   function enter6() {
     if (phase6) return;
     phase6 = true;
@@ -388,7 +398,10 @@
   function startTurn(dir) {
     if (mode !== 'open') return;
     var to = s + dir;
-    if (dir > 0 && to > N - 1) return;               // 最后一页：不动作
+    if (dir > 0 && to > N - 1) {                     // 最后一页再往前 = 手动进入片尾全屏 6
+      if (s === FADE_IDX) startEnding();
+      return;
+    }
     if (dir < 0 && to < 0) { closeBook(); return; }  // 首页向左 = 合书
     mode = 'turning';
     var from = s;
@@ -458,12 +471,12 @@
     pauseBase(from);
     playBase(to);        // 翻页动画完全结束后，目标页视频才开播
     if (to === FADE_IDX) { ending5 = false; fadeEl.classList.remove('on'); }
-    updateMuteVis();
     renderIdle();
     s = to;
     turn = null;
     mode = 'open';
     updateDots(s);
+    updateMuteVis();     // 必须在 s/mode 更新之后调用
     if (!hasTurned) { hasTurned = true; hint.classList.add('hidden'); }
   }
 
