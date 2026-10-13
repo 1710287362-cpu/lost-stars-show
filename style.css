@@ -149,8 +149,8 @@ html, body {
   background-repeat: no-repeat;
   background-size: 100% 100%;
 }
-.leaf-front .leaf-paper { background-image: url("assets/sheet_right.webp?v=2"); }
-.leaf-back  .leaf-paper { background-image: url("assets/sheet_left.webp?v=2"); }
+.leaf-front .leaf-paper { background-image: url("assets/sheet_right.webp?v=3"); }
+.leaf-back  .leaf-paper { background-image: url("assets/sheet_left.webp?v=3"); }
 
 /* 叶片内容视图：宽=整书宽，正面右移显示右半，背面显示左半 */
 .leaf-view {
@@ -192,8 +192,8 @@ html, body {
   background-repeat: no-repeat;
   background-size: 100% 100%;
 }
-.half-overlay.ov-left  .ov-paper { background-image: url("assets/sheet_left.webp?v=2"); }
-.half-overlay.ov-right .ov-paper { background-image: url("assets/sheet_right.webp?v=2"); }
+.half-overlay.ov-left  .ov-paper { background-image: url("assets/sheet_left.webp?v=3"); }
+.half-overlay.ov-right .ov-paper { background-image: url("assets/sheet_right.webp?v=3"); }
 .half-overlay .ov-view {
   position: absolute;
   top: 0;
