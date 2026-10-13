@@ -487,6 +487,27 @@ html, body {
 .fprog:hover .fprog-knob,
 .fprog:active .fprog-knob { transform: scale(1); opacity: 1; }
 
+/* ---------- 全屏退出按钮 ---------- */
+.fs-exit {
+  position: absolute;
+  top: 20px;
+  right: 22px;
+  z-index: 4;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .25);
+  background: rgba(20, 14, 8, .45);
+  color: #e8dcc0;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: .65;
+  transition: opacity .25s ease, background .25s ease, transform .15s ease;
+}
+.fs-exit:hover { opacity: .95; background: rgba(40, 28, 16, .6); }
+.fs-exit:active { transform: scale(.92); }
+
 /* ---------- 全屏视频播完后的按钮层 ---------- */
 .video-end-overlay {
   position: absolute;

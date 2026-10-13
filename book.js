@@ -193,6 +193,19 @@
   fullCtl.appendChild(ctlFs);
   stageFull.appendChild(fullCtl);
 
+  // 全屏退出按钮：不强制观看，随时返回书里
+  function makeExitBtn() {
+    var b = document.createElement('button');
+    b.className = 'fs-exit';
+    b.textContent = '✕';
+    b.setAttribute('aria-label', '退出全屏播放');
+    return b;
+  }
+  var sixExitBtn = makeExitBtn();
+  stage6.appendChild(sixExitBtn);
+  var fullExitBtn = makeExitBtn();
+  stageFull.appendChild(fullExitBtn);
+
   // 封面入口：直接观看完整视频（不必翻完所有页）
   var fullEntry = document.createElement('button');
   fullEntry.id = 'fullEntry';
@@ -274,6 +287,40 @@
 
   /* ---------- 完整视频（全屏） ---------- */
   var fullRetries = 0;
+  var fullFrom = 'cover';   // 完整视频的进入来源：cover=封面入口，six=6 播完
+  // 退出全屏视频，回到书里（toCover=true 回到合上的封面）
+  function backToBook(toCover) {
+    phase6 = false;
+    phaseFull = false;
+    ending5 = false;
+    fadeEl.classList.remove('on');
+    stage6.classList.remove('show');
+    stageFull.classList.remove('show');
+    video6.pause();
+    videoFull.pause();
+    sixEnd.classList.remove('show');
+    fullEnd.classList.remove('show');
+    fsLoad.classList.remove('show');
+    book.style.visibility = '';
+    if (toCover) {
+      mode = 'closed';
+      pc = 0;
+      s = 0;
+      renderCover(0);
+      cover.style.opacity = '';
+      setBaseContent(0);
+      dotsBox.classList.remove('show');
+      hint.textContent = '轻点或向左拖动 · 翻开这本书';
+      hint.classList.remove('hidden');
+    } else {
+      mode = 'open';       // 回到第 5 页（s 仍是 FADE_IDX，页面状态保留）
+      renderIdle();
+      cover.style.opacity = '0';
+      dotsBox.classList.add('show');
+      updateDots(s);
+    }
+    updateMuteVis();
+  }
   function warmFull() {
     if (!phaseFull && videoFull.preload !== 'auto') {
       videoFull.preload = 'auto';
@@ -430,14 +477,25 @@
   // 6 播完 → 完整视频
   sixEndBtn.addEventListener('click', function (e) {
     e.stopPropagation();
+    fullFrom = 'six';
     openFull();
   });
   // 封面页 → 直接观看完整视频（渐黑转场，与书内效果一致）
   fullEntry.addEventListener('click', function (e) {
     e.stopPropagation();
     if (phaseFull) return;
+    fullFrom = 'cover';
     fadeEl.classList.add('on');
     setTimeout(openFull, 900);
+  });
+  // 退出全屏：6 → 回第 5 页；完整视频 → 按来源回封面或第 5 页
+  sixExitBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    backToBook(false);
+  });
+  fullExitBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    backToBook(fullFrom === 'cover');
   });
   // 完整视频播完 → 重新播放
   fullEndBtn.addEventListener('click', function (e) {
