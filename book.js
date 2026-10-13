@@ -1,0 +1,477 @@
+/* ============ 《迷失的星星》翻书交互（真实叶片翻页 · 底层先切版） ============
+ * 页面顺序：头图视频 → 0 → 1 → t1 → t2 → t3
+ *
+ * 封面：点击/左拖翻开；第一页点左半 = 合书
+ * 翻页：右半页点击/左拖 = 下一页；左半页点击/右拖 = 上一页
+ *   - 翻页开始：底层立即溶解到目标页（右半随叶片掀起直接露出下一页），
+ *     目标页视频同时提前加载/播放
+ *   - 叶片正面 = 被掀起半页的定格封面（前翻=当前页右半，回翻=上一页右半）
+ *   - 叶片背面 = 目标页对应半页封面，落下时与底层完全衔接
+ *   - 翻页结束：叶片直接收走，无二次切换
+ *
+ * 视频规则：到页自动静音播放，不循环、停尾帧；
+ *           翻走暂停记忆进度，翻回继续；播完后再翻回则从开头重播；
+ *           合书全部复位。
+ */
+(function () {
+  'use strict';
+
+  var PAGES = [
+    { type: 'video', src: 'assets/hero.mp4',   poster: 'assets/poster_hero.jpg' },
+    { type: 'video', src: 'assets/0.mp4',      poster: 'assets/poster_0.jpg'    },
+    { type: 'video', src: 'assets/1.mp4',      poster: 'assets/poster_1.jpg'    },
+    { type: 'image', src: 'assets/t1.webp',    poster: 'assets/t1.webp'         },
+    { type: 'image', src: 'assets/t2.webp',    poster: 'assets/t2.webp'         },
+    { type: 'image', src: 'assets/t3.webp',    poster: 'assets/t3.webp'         }
+  ];
+  var N = PAGES.length;
+
+  var book       = document.getElementById('book');
+  var spreadBase = document.getElementById('spreadBase');
+  var baseSlot   = document.getElementById('baseSlot');
+  var baseShade  = document.getElementById('pageShade');
+  var leaf       = document.getElementById('leaf');
+  var frontView  = document.getElementById('frontView');
+  var backView   = document.getElementById('backView');
+  var leafShades = leaf.querySelectorAll('.leaf-shade');
+  var cover      = document.getElementById('coverFlip');
+  var cShade     = document.getElementById('coverShade');
+  var dotsBox    = document.getElementById('dots');
+  var hint       = document.getElementById('hint');
+
+  /* ---------- 每页内容：底层一份（直播） + 叶片封面一份（静态图） ---------- */
+  function makeVideo(src) {
+    var v = document.createElement('video');
+    v.src = src;
+    v.preload = 'auto';
+    v.playsInline = true;
+    v.setAttribute('playsinline', '');
+    v.setAttribute('muted', '');
+    v.muted = true;
+    return v;
+  }
+  function makeImg(src) {
+    var im = new Image();
+    im.src = src;
+    im.draggable = false;
+    return im;
+  }
+
+  var contents = [], clones = [], cloneImgs = [];
+  var vBase = {};                    // index -> 底层 video
+  var snapCanvas = document.createElement('canvas');
+  var pool = document.createElement('div');
+
+  // 半页遮盖层：翻页时用旧页面的半页盖住"晚切换"的一侧
+  var overlay  = document.createElement('div');
+  var ovPaper  = document.createElement('div');
+  var ovView   = document.createElement('div');
+  var ovSlot   = document.createElement('div');
+  var ovImg    = makeImg('');
+  overlay.className = 'half-overlay';
+  ovPaper.className = 'ov-paper';
+  ovView.className  = 'ov-view';
+  ovSlot.className  = 'page-content';
+  ovSlot.appendChild(ovImg);
+  ovView.appendChild(ovSlot);
+  overlay.appendChild(ovPaper);
+  overlay.appendChild(ovView);
+
+  function showOverlay(dir, src) {
+    overlay.className = 'half-overlay ' + (dir > 0 ? 'ov-left' : 'ov-right');
+    overlay.style.transition = 'none';
+    overlay.style.visibility = 'visible';
+    overlay.style.opacity = '1';
+  }
+  function hideOverlay() {
+    overlay.style.transition = 'opacity .25s ease';
+    overlay.style.opacity = '0';
+    setTimeout(function () {
+      overlay.style.visibility = 'hidden';
+      overlay.style.transition = 'none';
+    }, 270);
+  }
+  spreadBase.appendChild(overlay);
+
+  PAGES.forEach(function (page, i) {
+    var div = document.createElement('div');
+    div.className = 'page-content';
+    var cdiv = document.createElement('div');
+    cdiv.className = 'page-content';
+    var cim = makeImg(page.poster);  // 叶片封面图
+
+    if (page.type === 'video') {
+      var v1 = makeVideo(page.src);
+      div.appendChild(v1);
+      vBase[i] = v1;
+    } else {
+      div.appendChild(makeImg(page.src));
+    }
+    cdiv.appendChild(cim);
+    contents[i] = div;
+    clones[i] = cdiv;
+    cloneImgs[i] = cim;
+  });
+
+  /* ---------- 页码指示点 ---------- */
+  var dotEls = [];
+  for (var i = 0; i < N; i++) {
+    var d = document.createElement('i');
+    dotsBox.appendChild(d);
+    dotEls.push(d);
+  }
+  function updateDots(idx) {
+    dotEls.forEach(function (el, k) { el.classList.toggle('on', k === idx); });
+  }
+
+  /* ---------- 状态 ---------- */
+  var mode = 'closed';    // closed | opening | open | turning | closing
+  var pc = 0;             // 封面开合 0..1
+  var s = 0;              // 当前页索引
+  var turn = null;        // {dir, from, to, q}
+  var hasTurned = false;
+
+  /* ---------- 视频控制 ---------- */
+  function playBase(i) {
+    var v = vBase[i];
+    if (!v) return;
+    if (v.ended) { try { v.currentTime = 0; } catch (e) {} }
+    var pr = v.play();
+    if (pr && pr.catch) pr.catch(function () {});
+  }
+  function pauseBase(i) { var v = vBase[i]; if (v) v.pause(); }
+
+  // 视频页当前帧快照（作为叶片正面封面，与底层画面衔接）
+  function snapshotFor(i) {
+    var v = vBase[i];
+    if (!v) return PAGES[i].poster;
+    try {
+      if (v.readyState >= 2 && v.videoWidth) {
+        if (snapCanvas.width !== v.videoWidth) {
+          snapCanvas.width = v.videoWidth;
+          snapCanvas.height = v.videoHeight;
+        }
+        snapCanvas.getContext('2d').drawImage(v, 0, 0);
+        return snapCanvas.toDataURL('image/jpeg', 0.85);
+      }
+    } catch (e) {}
+    return PAGES[i].poster;
+  }
+
+  function pauseAll(reset) {
+    Object.keys(vBase).forEach(function (k) {
+      vBase[k].pause();
+      if (reset) { try { vBase[k].currentTime = 0; } catch (e) {} }
+    });
+  }
+
+  /* ---------- 基础绘制 ---------- */
+  function smooth(a, b, x) {
+    var t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  }
+  function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function setBaseContent(idx) {
+    while (baseSlot.firstChild) pool.appendChild(baseSlot.firstChild);
+    contents[idx].style.opacity = '';
+    baseSlot.appendChild(contents[idx]);
+  }
+
+  function renderCover(p) {
+    var angle = -180 * p;
+    var lift = Math.sin(p * Math.PI) * 30;
+    cover.style.transform =
+      'translateX(-50%) translateZ(' + lift.toFixed(1) + 'px) rotateY(' + angle.toFixed(2) + 'deg)';
+    cover.style.opacity = p <= 0.42 ? 1 : Math.max(0, 1 - (p - 0.42) / 0.2);
+    cShade.style.opacity = (Math.sin(p * Math.PI) * 0.45).toFixed(3);
+
+    var so = smooth(0.08, 0.55, p);
+    spreadBase.style.opacity = so.toFixed(3);
+    spreadBase.style.transform = 'scale(' + (0.955 + 0.045 * so).toFixed(4) + ')';
+    spreadBase.style.filter = 'brightness(' + (0.55 + 0.45 * so).toFixed(3) + ')';
+    baseShade.style.opacity = (1 - smooth(0.35, 0.85, p)).toFixed(3);
+  }
+
+  function renderIdle() {
+    spreadBase.style.opacity = '1';
+    spreadBase.style.transform = 'scale(1)';
+    spreadBase.style.filter = 'brightness(1)';
+    baseShade.style.opacity = '0';
+  }
+
+  /* ---------- 叶片绘制 ---------- */
+  // 前翻：rotY 0→-180（右半页向左翻）；回翻：-180→0（同一叶片反向播回）
+  function renderLeaf() {
+    var q = turn.q;
+    var rot = turn.dir > 0 ? -180 * q : -180 * (1 - q);
+    leaf.style.transform = 'rotateY(' + rot.toFixed(2) + 'deg)';
+    var sh = (Math.sin(q * Math.PI) * 0.55).toFixed(3);
+    leafShades[0].style.opacity = sh;
+    leafShades[1].style.opacity = sh;
+    baseShade.style.opacity = (Math.sin(q * Math.PI) * 0.22).toFixed(3);
+  }
+
+  /* ---------- 封面开合 ---------- */
+  function animateCover(to, dur, done) {
+    var from = pc, start = performance.now();
+    function tick(now) {
+      var t = Math.min(1, (now - start) / dur);
+      pc = from + (to - from) * easeInOutCubic(t);
+      renderCover(pc);
+      if (t < 1) requestAnimationFrame(tick);
+      else { pc = to; renderCover(pc); if (done) done(); }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function openBook() {
+    if (mode !== 'closed') return;
+    mode = 'opening';
+    setBaseContent(s);
+    animateCover(1, 1250, function () {
+      mode = 'open';
+      renderIdle();
+      cover.style.opacity = '0';
+      playBase(s);
+      dotsBox.classList.add('show');
+      updateDots(s);
+      hint.textContent = '点击右页 · 翻下一页　｜　点击左页 · 返回';
+    });
+  }
+
+  function closeBook() {
+    if (mode !== 'open') return;
+    mode = 'closing';
+    pauseAll(false);
+    cover.style.opacity = '';
+    dotsBox.classList.remove('show');
+    animateCover(0, 1100, function () {
+      mode = 'closed';
+      s = 0;
+      setBaseContent(0);
+      pauseAll(true);
+      hint.textContent = '轻点或向左拖动 · 翻开这本书';
+      if (hasTurned) hint.classList.remove('hidden');
+    });
+  }
+
+  // 底层内容溶解切换（翻页开始时把底层换到目标页）
+  function crossfadeBase(fromEl, toEl, dur) {
+    if (toEl.parentNode !== baseSlot) {
+      toEl.style.opacity = '0';
+      baseSlot.appendChild(toEl);
+    }
+    var start = performance.now();
+    function tick(now) {
+      var t = Math.min(1, (now - start) / dur);
+      var o = easeInOutCubic(t);
+      fromEl.style.opacity = String(1 - o);
+      toEl.style.opacity = String(o);
+      if (t < 1) requestAnimationFrame(tick);
+      else {
+        if (fromEl.parentNode === baseSlot) pool.appendChild(fromEl);
+        fromEl.style.opacity = '';
+        toEl.style.opacity = '';
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /* ---------- 翻页 ---------- */
+  function startTurn(dir) {
+    if (mode !== 'open') return;
+    var to = s + dir;
+    if (dir > 0 && to > N - 1) return;               // 最后一页：不动作
+    if (dir < 0 && to < 0) { closeBook(); return; }  // 首页向左 = 合书
+    mode = 'turning';
+    var from = s;
+    turn = { dir: dir, from: from, to: to, q: 0 };
+
+    // 叶片固定在中线右侧、绕书脊翻转；回翻只是同一动画反向播放
+    leaf.style.left = '50%';
+    if (dir > 0) {
+      // 前翻：正面=当前页右半定格（被掀起的页），背面=下一页左半封面
+      frontView.appendChild(clones[from]);
+      backView.appendChild(clones[to]);
+      cloneImgs[from].src = snapshotFor(from);
+      cloneImgs[to].src = PAGES[to].poster;
+    } else {
+      // 回翻：背面=当前页左半定格（起始时叶片镜像在左半），正面=上一页右半封面
+      frontView.appendChild(clones[to]);
+      backView.appendChild(clones[from]);
+      cloneImgs[to].src = PAGES[to].poster;
+      cloneImgs[from].src = snapshotFor(from);
+    }
+    pauseBase(from);
+
+    // 底层立刻溶解到目标页：被叶片掀起的那半页下直接露出目标页内容
+    crossfadeBase(contents[from], contents[to], 200);
+    playBase(to);        // 目标页视频提前开始加载/播放，露出时已是动态画面
+    updateDots(to);
+    // 另一半页先用旧页面盖住，等翻页 70% 左右再淡出（左右互不串味）
+    ovImg.src = PAGES[from].type === 'video' ? snapshotFor(from) : PAGES[from].poster;
+    showOverlay(dir);
+    turn.ovHidden = false;
+
+    leaf.style.visibility = 'visible';
+    renderLeaf();
+    animateLeaf();
+  }
+
+  var SWAP_Q = 0.7;         // 遮盖半页的淡出点：叶片扫过 70% 时新旧页面交接
+
+  function animateLeaf() {
+    var start = performance.now(), dur = 850;
+    function tick(now) {
+      var t = Math.min(1, (now - start) / dur);
+      turn.q = easeInOutCubic(t);
+      if (!turn.ovHidden && turn.q >= SWAP_Q) {
+        turn.ovHidden = true;
+        hideOverlay();
+      }
+      renderLeaf();
+      if (t < 1) requestAnimationFrame(tick);
+      else finishTurn();
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function finishTurn() {
+    var from = turn.from, to = turn.to;
+    if (!turn.ovHidden) hideOverlay();   // 兜底
+    // 底层已切到目标页，叶片两面内容与之完全衔接，直接收走
+    leaf.style.visibility = 'hidden';
+    leaf.style.transform = 'rotateY(0deg)';
+    leafShades[0].style.opacity = '0';
+    leafShades[1].style.opacity = '0';
+    // 叶片上的封面收回到停车场
+    if (clones[from].parentNode) pool.appendChild(clones[from]);
+    if (clones[to].parentNode) pool.appendChild(clones[to]);
+    pauseBase(from);
+    renderIdle();
+    s = to;
+    turn = null;
+    mode = 'open';
+    updateDots(s);
+    if (!hasTurned) { hasTurned = true; hint.classList.add('hidden'); }
+  }
+
+  /* ---------- 交互：点击 + 拖动 ---------- */
+  var dragging = false;
+  var downX = 0, downTime = 0, moved = false;
+
+  book.addEventListener('pointerdown', function (e) {
+    if (mode !== 'closed' && mode !== 'open') return;
+    dragging = true;
+    moved = false;
+    downX = e.clientX;
+    downTime = performance.now();
+    book.setPointerCapture(e.pointerId);
+  });
+
+  book.addEventListener('pointermove', function (e) {
+    if (dragging && Math.abs(e.clientX - downX) > 6) moved = true;
+  });
+
+  function endDrag(e) {
+    if (!dragging) return;
+    dragging = false;
+    var dx = e.clientX - downX;
+    var quick = performance.now() - downTime < 300;
+
+    if (mode === 'closed') {
+      if ((quick && Math.abs(dx) < 8) || dx < -40) openBook();
+    } else if (mode === 'open') {
+      var rect = book.getBoundingClientRect();
+      var rightHalf = downX > rect.left + rect.width / 2;
+      if (quick && Math.abs(dx) < 8) {
+        startTurn(rightHalf ? 1 : -1);
+      } else if (dx < -50) {
+        startTurn(1);
+      } else if (dx > 50) {
+        startTurn(-1);
+      }
+    }
+  }
+
+  book.addEventListener('pointerup', endDrag);
+  book.addEventListener('pointercancel', endDrag);
+  book.addEventListener('dragstart', function (e) { e.preventDefault(); });
+
+  /* ---------- 初始化：预载视频 + 全部封面图 ---------- */
+  setBaseContent(0);
+  renderCover(0);
+  Object.keys(vBase).forEach(function (k) { vBase[k].load(); });
+  PAGES.forEach(function (p) {
+    var a = new Image(); a.src = p.poster;
+    var b = new Image(); b.src = p.src;
+  });
+
+  /* ---------- 调试参数 ---------- */
+  // ?s=N 直接停在第 N 页（0 起）
+  // ?turn=0.5 前翻进行到 q 的画面；?turnback=0.5 回翻进行到 q 的画面
+  var qs = new URLSearchParams(location.search);
+  if (qs.get('s') !== null || qs.get('turn') !== null || qs.get('turnback') !== null) {
+    var idx = Math.min(N - 1, Math.max(0, parseInt(qs.get('s') || '0', 10) || 0));
+    s = idx;
+    mode = 'open';
+    pc = 1;
+    renderCover(1);
+    cover.style.opacity = '0';
+    renderIdle();
+    setBaseContent(s);
+    dotsBox.classList.add('show');
+    updateDots(s);
+    hint.classList.add('hidden');
+    if (qs.get('turn') !== null) {
+      var q = Math.min(1, Math.max(0, parseFloat(qs.get('turn')) || 0));
+      var toF = Math.min(N - 1, s + 1);
+      turn = { dir: 1, from: s, to: toF, q: q };
+      setBaseContent(toF);   // 底层翻页开始即切到目标页
+      if (q < SWAP_Q) {      // 左半页仍被旧页面盖住
+        ovImg.src = PAGES[s].poster;
+        showOverlay(1);
+      }
+      leaf.style.left = '50%';
+      frontView.appendChild(clones[s]);
+      backView.appendChild(clones[toF]);
+      cloneImgs[s].src = PAGES[s].poster;
+      cloneImgs[toF].src = PAGES[toF].poster;
+      leaf.style.visibility = 'visible';
+      renderLeaf();
+      mode = 'frozen';
+    } else if (qs.get('turnback') !== null) {
+      var qb = Math.min(1, Math.max(0, parseFloat(qs.get('turnback')) || 0));
+      var toB = Math.max(0, s - 1);
+      turn = { dir: -1, from: s, to: toB, q: qb };
+      setBaseContent(toB);   // 底层翻页开始即切到目标页
+      if (qb < SWAP_Q) {     // 右半页仍被旧页面盖住
+        ovImg.src = PAGES[s].poster;
+        showOverlay(-1);
+      }
+      leaf.style.left = '50%';
+      frontView.appendChild(clones[toB]);
+      backView.appendChild(clones[s]);
+      cloneImgs[s].src = PAGES[s].poster;
+      cloneImgs[toB].src = PAGES[toB].poster;
+      leaf.style.visibility = 'visible';
+      renderLeaf();
+      mode = 'frozen';
+    } else {
+      playBase(s);
+    }
+  }
+
+  // ?s=N&auto=1 自动执行一次真实翻页（auto=-1 回翻），用于复现收尾状态
+  if (qs.get('auto') !== null) {
+    var dirA = parseInt(qs.get('auto'), 10) || 1;
+    setTimeout(function () { startTurn(dirA); }, 800);
+    setInterval(function () {
+      document.title = 'm=' + mode + ' s=' + s + ' q=' + (turn ? turn.q.toFixed(2) : '-') +
+        ' leaf=' + leaf.style.visibility + ' baseKids=' + baseSlot.children.length;
+    }, 200);
+  }
+})();

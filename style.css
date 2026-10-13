@@ -1,0 +1,305 @@
+/* ============ 《迷失的星星》翻书展示 ============ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #16100b;
+}
+
+.desk {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(120% 90% at 50% 30%, #3a2c1e 0%, #241a10 48%, #120c07 100%);
+}
+
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(90% 80% at 50% 45%, transparent 55%, rgba(0,0,0,.55) 100%);
+}
+
+/* ---------- 3D 场景 ---------- */
+
+.scene {
+  position: relative;
+  perspective: 2000px;
+  perspective-origin: 50% 45%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+}
+
+.book {
+  position: relative;
+  /* 摊开书页比例 1997:1324 */
+  width: min(88vw, calc((100vh - 150px) * 1.508));
+  aspect-ratio: 1997 / 1324;
+  transform-style: preserve-3d;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ---------- 摊开的书页（底层） ---------- */
+
+.spread-base {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  will-change: opacity, transform, filter;
+}
+
+.spread-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+/* 跨页内容区：按检测出的装饰边框内侧定位（百分比内边距），内容不超出书页 */
+.content {
+  position: absolute;
+  left: 9.36%;
+  top: 5.44%;
+  right: 9.26%;
+  bottom: 7.25%;
+  overflow: hidden;
+}
+
+.page-content {
+  position: absolute;
+  inset: 0;
+}
+
+.page-content video, .page-content img {
+  width: 100%;
+  height: 100%;
+}
+
+.page-content video {
+  object-fit: contain;   /* 完整显示，不裁切 */
+  display: block;
+  pointer-events: none;
+  background: transparent;
+}
+
+.page-content img {
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  /* 透明底图片正片叠底，融入书页纸面 */
+  mix-blend-mode: multiply;
+}
+
+/* 书页阴影层（翻开/翻页过程中提供明暗变化） */
+.page-shade {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: rgba(8, 4, 0, 0.55);
+  opacity: 1;
+  pointer-events: none;
+}
+
+/* ---------- 翻页叶片：右半页绕书脊向左翻 ---------- */
+
+.leaf {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 50%;
+  height: 100%;
+  transform-origin: left center;   /* 旋转轴 = 书脊（书的中线） */
+  transform-style: preserve-3d;
+  visibility: hidden;
+  will-change: transform;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.leaf-face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.leaf-back {
+  transform: rotateY(180deg);      /* 背面预先翻转，翻到左侧时内容正向显示 */
+}
+
+/* 叶片纸面：与底层书页同一图片，按半幅对位 */
+.leaf-paper {
+  position: absolute;
+  inset: 0;
+  background-image: url("assets/pages_trim.png");
+  background-repeat: no-repeat;
+  background-size: 200% auto;      /* 以叶片宽度为半幅，撑满整书宽度 */
+}
+.leaf-front .leaf-paper { background-position: 100% 0; }  /* 右半幅 */
+.leaf-back  .leaf-paper { background-position: 0 0; }       /* 左半幅 */
+
+/* 叶片内容视图：宽=整书宽，正面右移显示右半，背面显示左半 */
+.leaf-view {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 200%;
+}
+.leaf-front .leaf-view { left: -100%; }
+.leaf-back  .leaf-view { left: 0; }
+
+/* 叶片上的内容与底层内容区同一坐标系（相对整书宽） */
+.leaf-view .page-content {
+  position: absolute;
+  left: 9.36%;
+  right: 9.26%;
+  top: 5.44%;
+  bottom: 7.25%;
+}
+
+/* ---------- 半页遮盖层：留住要晚切换的半页（另一侧先露出目标页） ---------- */
+.half-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  overflow: hidden;
+  z-index: 2;              /* 高于底层内容、低于叶片 */
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+.half-overlay.ov-left  { left: 0; }
+.half-overlay.ov-right { right: 0; }
+/* 遮盖层的纸面底衬：透明底插画正片叠底时垫住纸色，不透出底层新页 */
+.half-overlay .ov-paper {
+  position: absolute;
+  inset: 0;
+  background-image: url("assets/pages_trim.png");
+  background-repeat: no-repeat;
+  background-size: 200% auto;
+}
+.half-overlay.ov-left  .ov-paper { background-position: 0 0; }
+.half-overlay.ov-right .ov-paper { background-position: 100% 0; }
+.half-overlay .ov-view {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 200%;             /* 视图宽=整书宽，与底层同一坐标系 */
+}
+.half-overlay.ov-left  .ov-view { left: 0; }        /* 显示整书左半 */
+.half-overlay.ov-right .ov-view { left: -100%; }   /* 显示整书右半 */
+.half-overlay .page-content {
+  position: absolute;
+  left: 9.36%;
+  right: 9.26%;
+  top: 5.44%;
+  bottom: 7.25%;
+}
+
+/* 叶片弧度阴影 */
+.leaf-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+.leaf-front .leaf-shade {
+  background: linear-gradient(to left, rgba(0,0,0,.38) 0%, rgba(0,0,0,.08) 35%, transparent 60%);
+}
+.leaf-back .leaf-shade {
+  background: linear-gradient(to right, rgba(0,0,0,.38) 0%, rgba(0,0,0,.08) 35%, transparent 60%);
+}
+
+/* ---------- 封面（3D 翻转层） ---------- */
+
+.cover-flip {
+  position: absolute;
+  height: 84%;
+  top: 8%;
+  left: 50%;
+  aspect-ratio: 861 / 1119;
+  transform-origin: left center;
+  transform: translateX(-50%);
+  z-index: 5;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform, opacity, filter;
+  filter: drop-shadow(0 18px 28px rgba(0,0,0,.55));
+}
+
+.cover-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+/* 翻动时封面背光阴影：转角越大越暗 */
+.cover-shade {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, .6);
+  opacity: 0;
+  pointer-events: none;
+  border-radius: 6px;
+}
+
+/* ---------- 页码指示点 ---------- */
+
+.dots {
+  display: flex;
+  gap: 10px;
+  opacity: 0;
+  transition: opacity .6s ease;
+  pointer-events: none;
+}
+
+.dots.show { opacity: .9; }
+
+.dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6b5a3e;
+  transition: background .3s ease, transform .3s ease;
+}
+
+.dots i.on {
+  background: #cbb489;
+  transform: scale(1.35);
+}
+
+/* ---------- 提示文字 ---------- */
+
+.hint {
+  color: #cbb489;
+  font-size: 14px;
+  letter-spacing: .35em;
+  text-indent: .35em;
+  font-family: "Songti SC", "STSong", "SimSun", serif;
+  opacity: .85;
+  transition: opacity .8s ease;
+  pointer-events: none;
+}
+
+.hint.hidden { opacity: 0; }
+
+/* 小屏适配 */
+@media (max-width: 640px) {
+  .book { width: min(94vw, calc((100vh - 130px) * 1.508)); }
+  .hint { font-size: 12px; letter-spacing: .25em; }
+}
