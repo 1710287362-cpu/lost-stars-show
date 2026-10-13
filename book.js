@@ -4,7 +4,7 @@
  * 封面：点击/左拖翻开；第一页点左半 = 合书
  * 翻页：右半页点击/左拖 = 下一页；左半页点击/右拖 = 上一页
  *   - 翻页开始：底层立即溶解到目标页（右半随叶片掀起直接露出下一页），
- *     目标页视频同时提前加载/播放
+ *     目标页视频只在后台缓冲，画面由 poster/定格帧兜底
  *   - 叶片正面 = 被掀起半页的定格封面（前翻=当前页右半，回翻=上一页右半）
  *   - 叶片背面 = 目标页对应半页封面，落下时与底层完全衔接
  *   - 翻页结束：叶片直接收走，无二次切换
@@ -40,9 +40,10 @@
   var hint       = document.getElementById('hint');
 
   /* ---------- 每页内容：底层一份（直播） + 叶片封面一份（静态图） ---------- */
-  function makeVideo(src) {
+  function makeVideo(src, poster) {
     var v = document.createElement('video');
     v.src = src;
+    if (poster) v.poster = poster;
     v.preload = 'auto';
     v.playsInline = true;
     v.setAttribute('playsinline', '');
@@ -101,7 +102,7 @@
     var cim = makeImg(page.poster);  // 叶片封面图
 
     if (page.type === 'video') {
-      var v1 = makeVideo(page.src);
+      var v1 = makeVideo(page.src, page.poster);
       div.appendChild(v1);
       vBase[i] = v1;
     } else {
@@ -309,7 +310,8 @@
 
     // 底层立刻溶解到目标页：被叶片掀起的那半页下直接露出目标页内容
     crossfadeBase(contents[from], contents[to], 200);
-    playBase(to);        // 目标页视频提前开始加载/播放，露出时已是动态画面
+    // 目标页视频此刻不播放：preload='auto' 让数据在后台持续缓冲，
+    // 未加载完的画面由 poster 兜底，等叶片完全落下后在 finishTurn 中开播
     updateDots(to);
     // 另一半页先用旧页面盖住，等翻页 70% 左右再淡出（左右互不串味）
     ovImg.src = PAGES[from].type === 'video' ? snapshotFor(from) : PAGES[from].poster;
@@ -351,6 +353,7 @@
     if (clones[from].parentNode) pool.appendChild(clones[from]);
     if (clones[to].parentNode) pool.appendChild(clones[to]);
     pauseBase(from);
+    playBase(to);        // 翻页动画完全结束后，目标页视频才开播
     renderIdle();
     s = to;
     turn = null;
@@ -468,10 +471,16 @@
   // ?s=N&auto=1 自动执行一次真实翻页（auto=-1 回翻），用于复现收尾状态
   if (qs.get('auto') !== null) {
     var dirA = parseInt(qs.get('auto'), 10) || 1;
+    window.__playLog = [];
+    document.addEventListener('play', function (e) {
+      var name = e.target.currentSrc ? e.target.currentSrc.split('/').pop() : '?';
+      window.__playLog.push(name + '@' + performance.now().toFixed(0));
+    }, true);
     setTimeout(function () { startTurn(dirA); }, 800);
     setInterval(function () {
       document.title = 'm=' + mode + ' s=' + s + ' q=' + (turn ? turn.q.toFixed(2) : '-') +
-        ' leaf=' + leaf.style.visibility + ' baseKids=' + baseSlot.children.length;
+        ' leaf=' + leaf.style.visibility + ' baseKids=' + baseSlot.children.length +
+        ' plays=' + JSON.stringify(window.__playLog);
     }, 200);
   }
 })();
