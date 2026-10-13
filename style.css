@@ -370,6 +370,27 @@ html, body {
   background: #000;
 }
 
+/* 全屏加载中转圈提示 */
+.fs-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.fs-loading.show { display: flex; }
+.fs-loading i {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 3px solid rgba(232, 220, 192, .25);
+  border-top-color: #e8dcc0;
+  animation: fs-spin .9s linear infinite;
+}
+@keyframes fs-spin { to { transform: rotate(360deg); } }
+
 /* ---------- 全屏视频播完后的按钮层 ---------- */
 .video-end-overlay {
   position: absolute;

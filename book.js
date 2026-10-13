@@ -155,6 +155,12 @@
   fullEnd.appendChild(fullEndBtn);
   stageFull.appendChild(fullEnd);
 
+  // 全屏加载中转圈提示（网络慢时避免"卡住"的错觉）
+  var fsLoad = document.createElement('div');
+  fsLoad.className = 'fs-loading';
+  fsLoad.appendChild(document.createElement('i'));
+  stageFull.appendChild(fsLoad);
+
   // 封面入口：直接观看完整视频（不必翻完所有页）
   var fullEntry = document.createElement('button');
   fullEntry.id = 'fullEntry';
@@ -241,6 +247,7 @@
   }
 
   /* ---------- 完整视频（全屏） ---------- */
+  var fullRetries = 0;
   function warmFull() {
     if (!phaseFull && videoFull.preload !== 'auto') {
       videoFull.preload = 'auto';
@@ -259,9 +266,13 @@
     hint.classList.add('hidden');
     stage6.classList.remove('show');
     stageFull.classList.add('show');
-    videoFull.preload = 'auto';
-    videoFull.load();
+    if (videoFull.preload !== 'auto') {   // 后台已预载则不重置缓冲，避免 play 被中断
+      videoFull.preload = 'auto';
+      videoFull.load();
+    }
+    fullRetries = 0;
     videoFull.muted = !soundOn;
+    fsLoad.classList.add('show');
     tryPlay(videoFull);
     updateMuteVis();
   }
@@ -310,6 +321,7 @@
   });
   videoFull.addEventListener('playing', function () {
     fullEnd.classList.remove('show');
+    fsLoad.classList.remove('show');
     setTimeout(function () { fadeEl.classList.remove('on'); }, 250);
   });
   videoFull.addEventListener('canplay', function () {
@@ -317,7 +329,19 @@
   });
   videoFull.addEventListener('ended', function () {
     videoFull.pause();
+    fsLoad.classList.remove('show');
     fullEnd.classList.add('show');
+  });
+  // 网络错误自动重试（最多 3 次）
+  videoFull.addEventListener('error', function () {
+    if (!phaseFull || fullRetries >= 3) return;
+    fullRetries++;
+    setTimeout(function () {
+      if (!phaseFull || !videoFull.paused) return;
+      videoFull.load();
+      videoFull.muted = !soundOn;
+      tryPlay(videoFull);
+    }, 1500);
   });
 
   /* ---------- 页码指示点 ---------- */
