@@ -301,7 +301,7 @@ html, body {
 /* ---------- 声音开关（3/4/5/6 全局互通） ---------- */
 #muteBtn {
   position: fixed;
-  left: 26px;
+  right: 26px;
   bottom: 24px;
   z-index: 60;
   width: 50px;

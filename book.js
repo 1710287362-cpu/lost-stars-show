@@ -126,18 +126,20 @@
   document.body.appendChild(muteBtn);
 
   function syncMuteBtn() { muteBtn.textContent = soundOn ? '🔊' : '🔇'; }
-  // 位置：书页阶段锚定到摊开书页的左下角（≈视频左下角），全屏 6 时固定屏幕左下角
+  // 位置：书页阶段锚定到摊开书页的右下角内（≈视频右下角），全屏 6 时固定屏幕右下角
   function updateMuteVis() {
     var show = phase6 || (mode === 'open' && !!PAGES[s].sound);
     muteBtn.classList.toggle('show', show);
+    muteBtn.style.left = 'auto';
+    muteBtn.style.right = 'auto';
+    muteBtn.style.top = 'auto';
+    muteBtn.style.bottom = 'auto';
     if (phase6) {
-      muteBtn.style.left = '26px';
-      muteBtn.style.top = 'auto';
+      muteBtn.style.right = '26px';
       muteBtn.style.bottom = '24px';
     } else {
       var r = book.getBoundingClientRect();
-      muteBtn.style.left = Math.round(r.left + 8) + 'px';
-      muteBtn.style.bottom = 'auto';
+      muteBtn.style.left = Math.round(r.right - 58) + 'px';
       muteBtn.style.top = Math.round(r.bottom - 58) + 'px';
     }
   }
