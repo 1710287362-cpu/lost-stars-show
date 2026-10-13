@@ -278,12 +278,14 @@
       muteBtn.style.right = '26px';
       muteBtn.style.bottom = '24px';
     } else {
-      var r = book.getBoundingClientRect();
-      muteBtn.style.left = Math.round(r.right - 58) + 'px';
-      muteBtn.style.top = Math.round(r.bottom - 58) + 'px';
+      // 书页阶段：固定在跨页视频画面的右上角
+      var r = baseSlot.getBoundingClientRect();
+      muteBtn.style.left = Math.round(r.right - 60) + 'px';
+      muteBtn.style.top = Math.round(r.top + 10) + 'px';
     }
   }
   window.addEventListener('resize', updateMuteVis);
+  window.addEventListener('scroll', updateMuteVis, true);
   muteBtn.addEventListener('click', function (e) {
     e.stopPropagation();
     setSound(!soundOn);
@@ -626,12 +628,18 @@
     if (v.ended) { try { v.currentTime = 0; } catch (e) {} }
     v.muted = !(PAGES[i].sound && soundOn);
     tryPlay(v);
+    warmAhead(i);
   }
   function pauseBase(i) { var v = vBase[i]; if (v) v.pause(); }
   // 按需升级缓冲：翻到该页（或开书到该页）时才开始拉视频数据
   function warmBase(i) {
     var v = vBase[i];
     if (v && v.preload !== 'auto') { v.preload = 'auto'; v.load(); }
+  }
+  // 预加载后面 1~2 页：翻到时已基本缓冲完，不再等加载
+  function warmAhead(i) {
+    warmBase(i + 1);
+    warmBase(i + 2);
   }
 
   // 视频页当前帧快照（作为叶片正面封面，与底层画面衔接）

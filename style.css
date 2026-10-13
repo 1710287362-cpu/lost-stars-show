@@ -92,6 +92,8 @@ html, body {
   display: block;
   pointer-events: none;
   background: transparent;
+  /* 正片叠底，让视频像印在书页纸面上（与图片页一致） */
+  mix-blend-mode: multiply;
 }
 
 .page-content img {
@@ -140,16 +142,15 @@ html, body {
   transform: rotateY(180deg);      /* 背面预先翻转，翻到左侧时内容正向显示 */
 }
 
-/* 叶片纸面：与底层书页同一图片，按半幅对位 */
+/* 叶片纸面：单页纸张贴图（蒙版抠出，封皮透明），翻页只翻一张纸 */
 .leaf-paper {
   position: absolute;
   inset: 0;
-  background-image: url("assets/pages_trim.webp");
   background-repeat: no-repeat;
-  background-size: 200% auto;      /* 以叶片宽度为半幅，撑满整书宽度 */
+  background-size: 100% 100%;
 }
-.leaf-front .leaf-paper { background-position: 100% 0; }  /* 右半幅 */
-.leaf-back  .leaf-paper { background-position: 0 0; }       /* 左半幅 */
+.leaf-front .leaf-paper { background-image: url("assets/sheet_right.webp"); }
+.leaf-back  .leaf-paper { background-image: url("assets/sheet_left.webp"); }
 
 /* 叶片内容视图：宽=整书宽，正面右移显示右半，背面显示左半 */
 .leaf-view {
@@ -188,12 +189,11 @@ html, body {
 .half-overlay .ov-paper {
   position: absolute;
   inset: 0;
-  background-image: url("assets/pages_trim.webp");
   background-repeat: no-repeat;
-  background-size: 200% auto;
+  background-size: 100% 100%;
 }
-.half-overlay.ov-left  .ov-paper { background-position: 0 0; }
-.half-overlay.ov-right .ov-paper { background-position: 100% 0; }
+.half-overlay.ov-left  .ov-paper { background-image: url("assets/sheet_left.webp"); }
+.half-overlay.ov-right .ov-paper { background-image: url("assets/sheet_right.webp"); }
 .half-overlay .ov-view {
   position: absolute;
   top: 0;
