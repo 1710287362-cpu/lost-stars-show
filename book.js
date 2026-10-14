@@ -303,6 +303,21 @@
       var v1 = makeVideo(page.src, page.poster);
       div.appendChild(v1);
       vBase[i] = v1;
+      // 缓冲指示：移动端网络慢，视频在拉数据时给出加载环，避免看起来像坏掉
+      var ld = document.createElement('div');
+      ld.className = 'page-loading';
+      div.appendChild(ld);
+      v1.addEventListener('waiting', function () { ld.classList.add('show'); });
+      v1.addEventListener('playing', function () { ld.classList.remove('show'); });
+      v1.addEventListener('canplay', function () { ld.classList.remove('show'); });
+      v1.addEventListener('error', function () {
+        ld.classList.add('show');
+        // 网络错误自动重载一次（清空后重拉）
+        if (!v1.__errRetry) {
+          v1.__errRetry = true;
+          setTimeout(function () { try { v1.load(); } catch (e) {} }, 2000);
+        }
+      });
     } else {
       div.appendChild(makeImg(page.src));
     }
@@ -375,7 +390,14 @@
     }
     updateMuteVis();
   }
+  // 慢网/移动端判断：省流模式、2G 或窄屏都不后台预载 33MB 完整视频
+  // （它会在弱网抢占书页视频的带宽，用户点了"观看完整视频"再加载也来得及）
+  function slowNet() {
+    var c = navigator.connection || {};
+    return !!c.saveData || /2g/.test(c.effectiveType || '') || window.innerWidth < 768;
+  }
   function warmFull() {
+    if (slowNet()) return;
     if (!phaseFull && videoFull.preload !== 'auto') {
       videoFull.preload = 'auto';
       videoFull.load();  // 后台静默缓冲，点击时多半已就绪
@@ -629,6 +651,15 @@
     v.muted = !(PAGES[i].sound && soundOn);
     tryPlay(v);
     warmAhead(i);
+    // 移动端网络慢：数据没到就 play 会失败/黑屏，缓冲够后自动补播
+    if (v.readyState < 3 && !v.__retryPending) {
+      v.__retryPending = true;
+      v.addEventListener('canplay', function onCan () {
+        v.removeEventListener('canplay', onCan);
+        v.__retryPending = false;
+        if (s === i && !v.ended) playBase(i);
+      });
+    }
   }
   function pauseBase(i) { var v = vBase[i]; if (v) v.pause(); }
   // 按需升级缓冲：翻到该页（或开书到该页）时才开始拉视频数据
@@ -946,6 +977,8 @@
   setBaseContent(0);
   renderCover(0);
   updateMuteVis();
+  warmBase(0);           // 封面阶段就缓冲第一页视频，开书即播
+  warmBase(1);
   // 页面加载完空闲 1.5 秒后开始后台预加载完整视频
   if (document.readyState === 'complete') setTimeout(warmFull, 1500);
   else window.addEventListener('load', function () { setTimeout(warmFull, 1500); });
