@@ -3,11 +3,13 @@
  *
  * 封面：点击/左拖翻开；第一页点左半 = 合书
  * 翻页：右半页点击/左拖 = 下一页；左半页点击/右拖 = 上一页
- *   - 翻页开始：底层立即溶解到目标页（右半随叶片掀起直接露出下一页）
+ *   - 翻页开始：先截取当前页定格（视频当前帧），暂停复位；底层溶解到目标页
+ *   - 整页遮盖：翻页全程左右两半都定格当前页画面（与叶片正面融为一体），
+ *     70% 左右整面淡出统一切到目标页，避免左右割裂
  *   - 目标页视频只在后台缓冲，画面由 poster/定格帧兜底
- *   - 叶片正面 = 被掀起半页的定格封面（前翻=当前页右半，回翻=上一页右半）
+ *   - 叶片正面 = 被掀起半页的定格（前翻=当前页右半，回翻=上一页右半）
  *   - 叶片背面 = 目标页对应半页封面，落下时与底层完全衔接
- *   - 翻页结束：叶片直接收走，目标页视频此时才开播
+ *   - 翻页结束：叶片收走，目标页视频从头开播
  *
  * 视频规则：到页自动静音播放（3/4/5 有声、默认静音，右下角半透明静音键全局互通），
  *           不循环、停尾帧；翻走即复位，每次翻回都从头播放（左右两页画面始终一致）；
@@ -93,8 +95,8 @@
   overlay.appendChild(ovPaper);
   overlay.appendChild(ovView);
 
-  function showOverlay(dir, src) {
-    overlay.className = 'half-overlay ' + (dir > 0 ? 'ov-left' : 'ov-right');
+  function showOverlay() {
+    overlay.className = 'half-overlay ov-full';
     overlay.style.transition = 'none';
     overlay.style.visibility = 'visible';
     overlay.style.opacity = '1';
@@ -834,33 +836,37 @@
     var from = s;
     turn = { dir: dir, from: from, to: to, q: 0, quick: !!quick, chain: chain || null };
 
+    // 先截取当前页定格（视频当前帧），随后才暂停复位——顺序不能反，否则定格变首帧
+    var fromSnap = PAGES[from].type === 'video' ? snapshotFor(from) : PAGES[from].poster;
+
     // 叶片固定在中线右侧、绕书脊翻转；回翻只是同一动画反向播放
     leaf.style.left = '50%';
     if (dir > 0) {
       // 前翻：正面=当前页右半定格（被掀起的页），背面=下一页左半封面
       frontView.appendChild(clones[from]);
       backView.appendChild(clones[to]);
-      cloneImgs[from].src = snapshotFor(from);
+      cloneImgs[from].src = fromSnap;
       cloneImgs[to].src = PAGES[to].poster;
     } else {
       // 回翻：背面=当前页左半定格（起始时叶片镜像在左半），正面=上一页右半封面
       frontView.appendChild(clones[to]);
       backView.appendChild(clones[from]);
       cloneImgs[to].src = PAGES[to].poster;
-      cloneImgs[from].src = snapshotFor(from);
+      cloneImgs[from].src = fromSnap;
     }
-    pauseBase(from);
+    pauseBase(from);     // 暂停并复位：翻回时从头播
     if (from === FADE_IDX) { ending5 = false; fadeEl.classList.remove('on'); }
 
-    // 底层立刻溶解到目标页：被叶片掀起的那半页下直接露出目标页内容
+    // 底层立刻溶解到目标页（整面遮盖下不可见，70% 时随遮盖一起露出）
     crossfadeBase(contents[from], contents[to], 200);
     warmBase(to);        // 目标页视频后台缓冲，画面由 poster/定格帧兜底
     updateDots(to);
-    // 另一半页先用旧页面盖住，等翻页 70% 左右再淡出（左右互不串味）
+    // 整页遮盖：翻页全程左右两边都定格当前页画面（与叶片正面融为一体），
+    // 到 70% 左右整面淡出统一切到目标页，避免左右割裂
     // 快速连翻时跳过遮盖：速度太快，直接整体切换更有"哗哗翻书"感
     if (!quick) {
-      ovImg.src = PAGES[from].type === 'video' ? snapshotFor(from) : PAGES[from].poster;
-      showOverlay(dir);
+      ovImg.src = fromSnap;
+      showOverlay();
       turn.ovHidden = false;
     } else {
       turn.ovHidden = true;
@@ -871,7 +877,7 @@
     animateLeaf();
   }
 
-  var SWAP_Q = 0.7;         // 遮盖半页的淡出点：叶片扫过 70% 时新旧页面交接
+  var SWAP_Q = 0.7;         // 整面遮盖的淡出点：叶片扫过 70% 时新旧页面整体交接
 
   function animateLeaf() {
     var start = performance.now(), dur = turn.quick ? 140 : 850;
