@@ -14,7 +14,7 @@
  * 视频规则：到页自动静音播放（3/4/5 有声、默认静音，右下角半透明静音键全局互通），
  *           不循环、停尾帧；翻走即复位，每次翻回都从头播放（左右两页画面始终一致）；
  *           合书全部复位。
- * 片尾：5 播放至最后约 1.6 秒时整屏渐黑，随后全屏播放 6（声音开关互通）；
+ * 片尾：5 播放至最后约 1.6 秒时整屏渐黑（5 不停，跟着全屏一起变黑），随后全屏播放 6；
  *       5 上点右页或向左拖动可手动提前进入 6，转场效果相同。
  * 完整视频：6 播完出现"观看完整视频"按钮；封面页有"直接观看完整视频"入口；
  *           完整视频全屏播放（声音开关互通），页面空闲时后台预加载。
@@ -331,11 +331,10 @@
 
   /* ---------- 5 的渐黑 → 全屏 6 衔接 ---------- */
   // 手动从 5 翻到 6：渐黑后进入全屏（转场效果与自动衔接一致）
+  // 5 不暂停：视频继续播放，跟着整屏一起渐黑，画面不消失
   function startEnding() {
     if (phase6 || ending5) return;
     ending5 = true;
-    var v = vBase[FADE_IDX];
-    if (v) v.pause();
     fadeEl.classList.add('on');
     setTimeout(enter6, 1300);
   }
@@ -530,15 +529,13 @@
   stageFull.addEventListener('touchstart', pokeCtl, { passive: true });
   var v5 = vBase[FADE_IDX];
   if (v5) {
-    // 播放到尾声时整屏渐黑，给全屏 6 做转场
+    // 播放到尾声时整屏渐黑（5 继续播，随全屏一起变黑），随后进入全屏 6
     v5.addEventListener('timeupdate', function () {
       if (phase6 || v5.paused || !v5.duration) return;
-      if (!ending5 && v5.duration - v5.currentTime <= FADE_AHEAD) {
-        ending5 = true;
-        fadeEl.classList.add('on');
-      }
+      if (!ending5 && v5.duration - v5.currentTime <= FADE_AHEAD) startEnding();
     });
-    v5.addEventListener('ended', function () { enter6(); });
+    // 兜底：没走渐黑就直接结束（如被 seek 到末尾）时立刻进入 6
+    v5.addEventListener('ended', function () { if (!ending5) enter6(); });
   }
   video6.addEventListener('playing', function () {
     sixEnd.classList.remove('show');
