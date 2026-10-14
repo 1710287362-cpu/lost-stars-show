@@ -391,6 +391,24 @@ html, body {
 }
 @keyframes fs-spin { to { transform: rotate(360deg); } }
 
+/* 书页视频缓冲加载环（移动端弱网时提示正在拉数据，避免看起来像坏掉） */
+.page-loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  display: none;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  border: 3px solid rgba(232, 220, 192, .25);
+  border-top-color: #e8dcc0;
+  animation: fs-spin .9s linear infinite;
+  pointer-events: none;
+}
+.page-loading.show { display: block; }
+
 /* ---------- 完整视频播放控制条（B 站式） ---------- */
 #fullCtl {
   position: absolute;
