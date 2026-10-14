@@ -185,6 +185,10 @@ html, body {
 }
 .half-overlay.ov-left  { left: 0; }
 .half-overlay.ov-right { right: 0; }
+/* 整页遮盖：翻页全程左右两半都盖住（当前页定格），70% 时统一切换 */
+.half-overlay.ov-full { left: 0; width: 100%; }
+.half-overlay.ov-full .ov-paper { background-image: url("assets/pages_trim.webp"); }
+.half-overlay.ov-full .ov-view { left: 0; width: 100%; }
 /* 遮盖层的纸面底衬：透明底插画正片叠底时垫住纸色，不透出底层新页 */
 .half-overlay .ov-paper {
   position: absolute;
