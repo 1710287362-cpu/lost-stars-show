@@ -3,9 +3,9 @@
  *
  * 封面：点击/左拖翻开；第一页点左半 = 合书
  * 翻页：右半页点击/左拖 = 下一页；左半页点击/右拖 = 上一页
- *   - 翻页开始：先截取当前页定格（视频当前帧），暂停复位；底层溶解到目标页
- *   - 整页遮盖：翻页全程左右两半都定格当前页画面（与叶片正面融为一体），
- *     65% 处整面淡出统一切到目标页，避免左右割裂
+ *   - 翻页开始：先截取当前页定格（视频当前帧），暂停复位；底层溶解到目标页，
+ *     被掀起对侧（前翻=右半）立即露出下一页内容
+ *   - 另一半用当前页定格盖到 65% 再快速淡出切换（翻页全程都有定格画面兜底）
  *   - 目标页视频只在后台缓冲，画面由 poster/定格帧兜底
  *   - 叶片正面 = 被掀起半页的定格（前翻=当前页右半，回翻=上一页右半）
  *   - 叶片背面 = 目标页对应半页封面，落下时与底层完全衔接
@@ -95,8 +95,8 @@
   overlay.appendChild(ovPaper);
   overlay.appendChild(ovView);
 
-  function showOverlay() {
-    overlay.className = 'half-overlay ov-full';
+  function showOverlay(dir) {
+    overlay.className = 'half-overlay ' + (dir > 0 ? 'ov-left' : 'ov-right');
     overlay.style.transition = 'none';
     overlay.style.visibility = 'visible';
     overlay.style.opacity = '1';
@@ -857,16 +857,16 @@
     pauseBase(from);     // 暂停并复位：翻回时从头播
     if (from === FADE_IDX) { ending5 = false; fadeEl.classList.remove('on'); }
 
-    // 底层立刻溶解到目标页（整面遮盖下不可见，65% 时随遮盖一起露出）
+    // 底层立刻溶解到目标页：翻页一开始右半（前翻）/左半（回翻）就直接显示下一页内容
     crossfadeBase(contents[from], contents[to], 200);
     warmBase(to);        // 目标页视频后台缓冲，画面由 poster/定格帧兜底
     updateDots(to);
-    // 整页遮盖：翻页全程左右两边都定格当前页画面（与叶片正面融为一体），
-    // 到 65% 处整面淡出统一切到目标页，避免左右割裂
+    // 另一半（被叶片掀起的对侧）用当前页定格盖住，65% 处快速淡出切换，
+    // 既保证翻页全程有定格画面兜底，又让下一页内容尽早露出
     // 快速连翻时跳过遮盖：速度太快，直接整体切换更有"哗哗翻书"感
     if (!quick) {
       ovImg.src = fromSnap;
-      showOverlay();
+      showOverlay(dir);
       turn.ovHidden = false;
     } else {
       turn.ovHidden = true;
@@ -877,7 +877,7 @@
     animateLeaf();
   }
 
-  var SWAP_Q = 0.65;         // 整面遮盖的淡出点：叶片扫过 65% 时新旧页面整体交接
+  var SWAP_Q = 0.65;         // 遮盖淡出点：叶片扫过 65% 时剩余半页切换到目标页
 
   function animateLeaf() {
     var start = performance.now(), dur = turn.quick ? 140 : 850;
