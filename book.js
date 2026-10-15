@@ -29,7 +29,7 @@
   /* 视频走 CDN：github.io 对 mp4 限速仅 ~17KB/s（内嵌播放两秒即卡），
      jsDelivr(~300KB/s) 与 GitHub Release(~280KB/s) 通道正常 */
   var CDN = 'https://cdn.jsdelivr.net/gh/1710287362-cpu/lost-stars-show@main/assets/';
-  var FULL_SRC = 'https://github.com/1710287362-cpu/lost-stars-show/releases/download/media/full.mp4';
+  var FULL_SRC = 'https://gh-proxy.com/https://github.com/1710287362-cpu/lost-stars-show/releases/download/media/full.mp4';
   var PAGES = [
     { type: 'video', src: CDN + 'hero.mp4',   poster: CDN + 'poster_hero.jpg' },
     { type: 'video', src: CDN + '0.mp4?v=2',  poster: CDN + 'poster_0.jpg'    },
@@ -48,7 +48,7 @@
   var N = PAGES.length;
   var FADE_IDX = N - 1;                       // 5 的索引（最后一张书页）
   var VIDEO6 = { src: CDN + '6.mp4', poster: CDN + 'poster_6.jpg' };
-  var FULL   = { src: FULL_SRC + '?v=3', poster: CDN + 'poster_full.jpg' };
+  var FULL   = { src: FULL_SRC, poster: CDN + 'poster_full.jpg' };
   var FADE_AHEAD = 1.6;                       // 5 结尾提前渐黑的秒数
 
   var book       = document.getElementById('book');
