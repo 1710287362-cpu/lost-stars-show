@@ -980,7 +980,7 @@
     return true;
   }
 
-  var SWAP_Q = 0.65;         // 遮盖淡出点：叶片扫过 65% 时剩余半页切换到目标页
+  var SWAP_Q = 0.75;         // 遮盖淡出点：叶片扫过 75% 时剩余半页切换到目标页
 
   // 从 fromQ 匀速动画到 q=1（完成翻页，随后 finishTurn 加载并开播目标页视频）
   function animateLeaf(fromQ, dur) {
