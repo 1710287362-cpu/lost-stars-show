@@ -31,24 +31,24 @@
   var CDN = 'https://cdn.jsdelivr.net/gh/1710287362-cpu/lost-stars-show@main/assets/';
   var FULL_SRC = 'https://github.com/1710287362-cpu/lost-stars-show/releases/download/media/full.mp4';
   var PAGES = [
-    { type: 'video', src: CDN + 'hero.mp4',   poster: 'assets/poster_hero.jpg' },
-    { type: 'video', src: CDN + '0.mp4?v=2',  poster: 'assets/poster_0.jpg'    },
-    { type: 'video', src: CDN + '1.mp4?v=2',  poster: 'assets/poster_1.jpg'    },
-    { type: 'image', src: 'assets/t1.webp',   poster: 'assets/t1.webp'         },
-    { type: 'image', src: 'assets/t2.webp',   poster: 'assets/t2.webp'         },
-    { type: 'image', src: 'assets/t3.webp',   poster: 'assets/t3.webp'         },
-    { type: 'video', src: CDN + '2.mp4?v=2',  poster: 'assets/poster_2.jpg'    },
-    { type: 'image', src: 'assets/t4.webp',   poster: 'assets/t4.webp'         },
-    { type: 'image', src: 'assets/t5.webp',   poster: 'assets/t5.webp'         },
-    { type: 'image', src: 'assets/t6.webp',   poster: 'assets/t6.webp'         },
-    { type: 'video', src: CDN + '3.mp4?v=2',  poster: 'assets/poster_3.jpg', sound: true },
-    { type: 'video', src: CDN + '4.mp4?v=2',  poster: 'assets/poster_4.jpg', sound: true },
-    { type: 'video', src: CDN + '5.mp4?v=2',  poster: 'assets/poster_5.jpg', sound: true, fadeout: true }
+    { type: 'video', src: CDN + 'hero.mp4',   poster: CDN + 'poster_hero.jpg' },
+    { type: 'video', src: CDN + '0.mp4?v=2',  poster: CDN + 'poster_0.jpg'    },
+    { type: 'video', src: CDN + '1.mp4?v=2',  poster: CDN + 'poster_1.jpg'    },
+    { type: 'image', src: CDN + 't1.webp',   poster: CDN + 't1.webp'         },
+    { type: 'image', src: CDN + 't2.webp',   poster: CDN + 't2.webp'         },
+    { type: 'image', src: CDN + 't3.webp',   poster: CDN + 't3.webp'         },
+    { type: 'video', src: CDN + '2.mp4?v=2',  poster: CDN + 'poster_2.jpg'    },
+    { type: 'image', src: CDN + 't4.webp',   poster: CDN + 't4.webp'         },
+    { type: 'image', src: CDN + 't5.webp',   poster: CDN + 't5.webp'         },
+    { type: 'image', src: CDN + 't6.webp',   poster: CDN + 't6.webp'         },
+    { type: 'video', src: CDN + '3.mp4?v=2',  poster: CDN + 'poster_3.jpg', sound: true },
+    { type: 'video', src: CDN + '4.mp4?v=2',  poster: CDN + 'poster_4.jpg', sound: true },
+    { type: 'video', src: CDN + '5.mp4?v=2',  poster: CDN + 'poster_5.jpg', sound: true, fadeout: true }
   ];
   var N = PAGES.length;
   var FADE_IDX = N - 1;                       // 5 的索引（最后一张书页）
-  var VIDEO6 = { src: CDN + '6.mp4', poster: 'assets/poster_6.jpg' };
-  var FULL   = { src: FULL_SRC + '?v=2', poster: 'assets/poster_full.jpg' };
+  var VIDEO6 = { src: CDN + '6.mp4', poster: CDN + 'poster_6.jpg' };
+  var FULL   = { src: FULL_SRC + '?v=2', poster: CDN + 'poster_full.jpg' };
   var FADE_AHEAD = 1.6;                       // 5 结尾提前渐黑的秒数
 
   var book       = document.getElementById('book');
