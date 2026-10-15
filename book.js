@@ -48,7 +48,7 @@
   var N = PAGES.length;
   var FADE_IDX = N - 1;                       // 5 的索引（最后一张书页）
   var VIDEO6 = { src: CDN + '6.mp4', poster: CDN + 'poster_6.jpg' };
-  var FULL   = { src: FULL_SRC + '?v=2', poster: CDN + 'poster_full.jpg' };
+  var FULL   = { src: FULL_SRC + '?v=3', poster: CDN + 'poster_full.jpg' };
   var FADE_AHEAD = 1.6;                       // 5 结尾提前渐黑的秒数
 
   var book       = document.getElementById('book');
