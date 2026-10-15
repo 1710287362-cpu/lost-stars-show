@@ -1139,6 +1139,7 @@
   book.addEventListener('pointermove', function (e) {
     if (!dragging) return;
     var dx = e.clientX - downX, dy = e.clientY - downY;
+    window.__dbg = { dragging: dragging, moved: moved, dx: dx, mode: mode, turn: !!turn, liveTurn: !!liveTurn };
     if (!moved) {
       if (Math.abs(dx) <= 8 || Math.abs(dx) < Math.abs(dy)) return;  // 微小/纵向移动忽略
       moved = true;
@@ -1147,6 +1148,7 @@
         beginLiveTurn(downX > r0.left + r0.width / 2 ? 1 : -1);
       }
     }
+    window.__dbg2 = { moved: moved, mode: mode, liveTurn: !!liveTurn, turnQ: turn ? turn.q : null };
     if (liveTurn) moveLiveTurn(e.clientX);   // 叶片跟手
   });
 
