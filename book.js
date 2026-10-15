@@ -2,8 +2,9 @@
  * 页面顺序：头图视频 → 0 → 1 → t1 → t2 → t3 → 2 → t4 → t5 → t6 → 3 → 4 → 5 →【全屏 6】
  *
  * 封面：点击/左拖翻开；第一页点左半 = 合书
- * 翻页：右半页点击/左拖 = 下一页；左半页点击/右拖 = 上一页
- *   - 翻页开始：先截取当前页定格（视频当前帧），暂停复位；底层溶解到目标页，
+ * 翻页：点击右/左半页翻下/上一页；拖动时叶片跟手（指针位置直接映射为叶片转角），
+ *       往左拖=向前翻、往右拖=向后翻，松手时没过 35% 退回取消；视频在翻页完成后才加载
+ *   - 翻页准备：截取当前页定格（视频当前帧）；底层溶解到目标页，
  *     被掀起对侧（前翻=右半）立即露出下一页内容
  *   - 另一半用当前页定格盖到 65% 再快速淡出切换（翻页全程都有定格画面兜底）
  *   - 目标页视频只在后台缓冲，画面由 poster/定格帧兜底
@@ -25,25 +26,29 @@
 (function () {
   'use strict';
 
+  /* 视频走 CDN：github.io 对 mp4 限速仅 ~17KB/s（内嵌播放两秒即卡），
+     jsDelivr(~300KB/s) 与 GitHub Release(~280KB/s) 通道正常 */
+  var CDN = 'https://cdn.jsdelivr.net/gh/1710287362-cpu/lost-stars-show@main/assets/';
+  var FULL_SRC = 'https://github.com/1710287362-cpu/lost-stars-show/releases/download/media/full.mp4';
   var PAGES = [
-    { type: 'video', src: 'assets/hero.mp4',  poster: 'assets/poster_hero.jpg' },
-    { type: 'video', src: 'assets/0.mp4?v=2',     poster: 'assets/poster_0.jpg'    },
-    { type: 'video', src: 'assets/1.mp4?v=2',     poster: 'assets/poster_1.jpg'    },
+    { type: 'video', src: CDN + 'hero.mp4',   poster: 'assets/poster_hero.jpg' },
+    { type: 'video', src: CDN + '0.mp4?v=2',  poster: 'assets/poster_0.jpg'    },
+    { type: 'video', src: CDN + '1.mp4?v=2',  poster: 'assets/poster_1.jpg'    },
     { type: 'image', src: 'assets/t1.webp',   poster: 'assets/t1.webp'         },
     { type: 'image', src: 'assets/t2.webp',   poster: 'assets/t2.webp'         },
     { type: 'image', src: 'assets/t3.webp',   poster: 'assets/t3.webp'         },
-    { type: 'video', src: 'assets/2.mp4?v=2',     poster: 'assets/poster_2.jpg'    },
+    { type: 'video', src: CDN + '2.mp4?v=2',  poster: 'assets/poster_2.jpg'    },
     { type: 'image', src: 'assets/t4.webp',   poster: 'assets/t4.webp'         },
     { type: 'image', src: 'assets/t5.webp',   poster: 'assets/t5.webp'         },
     { type: 'image', src: 'assets/t6.webp',   poster: 'assets/t6.webp'         },
-    { type: 'video', src: 'assets/3.mp4?v=2',     poster: 'assets/poster_3.jpg', sound: true },
-    { type: 'video', src: 'assets/4.mp4?v=2',     poster: 'assets/poster_4.jpg', sound: true },
-    { type: 'video', src: 'assets/5.mp4?v=2',     poster: 'assets/poster_5.jpg', sound: true, fadeout: true }
+    { type: 'video', src: CDN + '3.mp4?v=2',  poster: 'assets/poster_3.jpg', sound: true },
+    { type: 'video', src: CDN + '4.mp4?v=2',  poster: 'assets/poster_4.jpg', sound: true },
+    { type: 'video', src: CDN + '5.mp4?v=2',  poster: 'assets/poster_5.jpg', sound: true, fadeout: true }
   ];
   var N = PAGES.length;
   var FADE_IDX = N - 1;                       // 5 的索引（最后一张书页）
-  var VIDEO6 = { src: 'assets/6.mp4', poster: 'assets/poster_6.jpg' };
-  var FULL   = { src: 'assets/full.mp4?v=2', poster: 'assets/poster_full.jpg' };
+  var VIDEO6 = { src: CDN + '6.mp4', poster: 'assets/poster_6.jpg' };
+  var FULL   = { src: FULL_SRC + '?v=2', poster: 'assets/poster_full.jpg' };
   var FADE_AHEAD = 1.6;                       // 5 结尾提前渐黑的秒数
 
   var book       = document.getElementById('book');
@@ -919,10 +924,23 @@
     }
     if (dir < 0 && to < 0) { closeBook(); return; }  // 首页向左 = 合书
     mode = 'turning';
-    var from = s;
-    turn = { dir: dir, from: from, to: to, q: 0, quick: !!quick, chain: chain || null };
+    if (!prepareTurn(dir, to, !!quick)) { mode = 'open'; return; }
+    turn.chain = chain || null;
+    pauseBase(turn.from);   // 暂停并复位：翻回时从头播
+    updateDots(turn.to);
+    leaf.style.visibility = 'visible';
+    renderLeaf();
+    animateLeaf(0, quick ? 140 : 850);
+  }
 
-    // 先截取当前页定格（视频当前帧），随后才暂停复位——顺序不能反，否则定格变首帧
+  // 翻页准备（点击翻页与拖动跟手翻页共用）：
+  // 定格截图 → 叶片两面 → 底层溶解到目标页 → 对侧半页用当前页定格盖住。
+  // 注意：这里不暂停当前页视频——拖动中途取消时底页换回、视频无缝继续播
+  function prepareTurn(dir, to, quick) {
+    var from = s;
+    turn = { dir: dir, from: from, to: to, q: 0, quick: !!quick, chain: null };
+
+    // 先截取当前页定格（视频当前帧）——顺序不能反，否则定格变首帧
     var fromSnap = PAGES[from].type === 'video' ? snapshotFor(from) : PAGES[from].poster;
 
     // 叶片固定在中线右侧、绕书脊翻转；回翻只是同一动画反向播放
@@ -940,13 +958,11 @@
       cloneImgs[to].src = PAGES[to].poster;
       cloneImgs[from].src = fromSnap;
     }
-    pauseBase(from);     // 暂停并复位：翻回时从头播
     if (from === FADE_IDX) { ending5 = false; fadeEl.classList.remove('on'); }
 
     // 底层立刻溶解到目标页：翻页一开始右半（前翻）/左半（回翻）就直接显示下一页内容
     crossfadeBase(contents[from], contents[to], 200);
     warmBase(to);        // 目标页视频后台缓冲，画面由 poster/定格帧兜底
-    updateDots(to);
     // 另一半（被叶片掀起的对侧）用当前页定格盖住，65% 处快速淡出切换，
     // 既保证翻页全程有定格画面兜底，又让下一页内容尽早露出
     // 快速连翻时跳过遮盖：速度太快，直接整体切换更有"哗哗翻书"感
@@ -957,19 +973,18 @@
     } else {
       turn.ovHidden = true;
     }
-
-    leaf.style.visibility = 'visible';
-    renderLeaf();
-    animateLeaf();
+    return true;
   }
 
   var SWAP_Q = 0.65;         // 遮盖淡出点：叶片扫过 65% 时剩余半页切换到目标页
 
-  function animateLeaf() {
-    var start = performance.now(), dur = turn.quick ? 140 : 850;
+  // 从 fromQ 匀速动画到 q=1（完成翻页，随后 finishTurn 加载并开播目标页视频）
+  function animateLeaf(fromQ, dur) {
+    var start = performance.now();
+    var q0 = fromQ || 0;
     function tick(now) {
       var t = Math.min(1, (now - start) / dur);
-      turn.q = easeInOutCubic(t);
+      turn.q = q0 + (1 - q0) * easeInOutCubic(t);
       if (!turn.ovHidden && turn.q >= SWAP_Q) {
         turn.ovHidden = true;
         hideOverlay();
@@ -979,6 +994,84 @@
       else finishTurn();
     }
     requestAnimationFrame(tick);
+  }
+
+  /* ---------- 拖动跟手翻页：叶片角度实时跟随指针 ----------
+   * 指针位置直接映射为叶片转角（指针在右缘=0°，书脊=-90°，左缘=-180°）：
+   * 往左拖=向前翻，往右拖=向后翻，拖回原位=取消；
+   * 松手时翻过 35% 就完成本次翻页（视频在翻页完成后才加载），否则退回取消。 */
+  var liveTurn = null;
+  function beginLiveTurn(dir) {
+    if (mode !== 'open' || liveTurn || turn) return;
+    var to = s + dir;
+    if (to < 0 || to > N - 1) return;    // 首页左侧/末页右侧保持原有触发（合书/进6）
+    mode = 'turning';
+    if (!prepareTurn(dir, to, false)) { mode = 'open'; return; }
+    liveTurn = { started: false };
+  }
+  // 指针 x → 本次翻页完成度 q（0..1）
+  function liveQ(clientX) {
+    var rect = book.getBoundingClientRect();
+    var spine = rect.left + rect.width / 2;
+    var c = Math.max(-1, Math.min(1, (spine - clientX) / (rect.width / 2)));
+    var rot = -Math.acos(c) * 180 / Math.PI;
+    return liveTurn.dir > 0 ? (-rot / 180) : (1 + rot / 180);
+  }
+  function moveLiveTurn(clientX) {
+    var q = Math.max(0, Math.min(1, liveQ(clientX)));
+    turn.q = q;
+    if (!liveTurn.started) {
+      liveTurn.started = true;
+      leaf.style.visibility = 'visible';
+    }
+    if (!turn.ovHidden && turn.q >= SWAP_Q) {
+      turn.ovHidden = true;
+      hideOverlay();
+    }
+    renderLeaf();
+  }
+  function endLiveTurn(clientX) {
+    var q = Math.max(0, Math.min(1, liveQ(clientX)));   // 先算（依赖 liveTurn.dir）
+    var lt = liveTurn;
+    liveTurn = null;
+    if (!lt.started) {          // 实际没拖动：等价点击，走完整翻页动画
+      animateLeaf(0, 850);
+      return;
+    }
+    if (q >= 0.35) {            // 已过 35%：完成翻页，视频随后加载播放
+      animateLeaf(q, Math.max(160, (1 - q) * 550));
+    } else {                    // 没过 35%：叶片退回，取消翻页
+      cancelLiveTurn(q);
+    }
+  }
+  function cancelLiveTurn(q0) {
+    var from = turn.from, to = turn.to;
+    var start = performance.now();
+    var dur = Math.max(140, q0 * 320);
+    function tick(now) {
+      var t = Math.min(1, (now - start) / dur);
+      turn.q = q0 * (1 - easeInOutCubic(t));
+      renderLeaf();
+      if (t < 1) requestAnimationFrame(tick);
+      else cleanupCancel(from, to);
+    }
+    requestAnimationFrame(tick);
+  }
+  function cleanupCancel(from, to) {
+    leaf.style.visibility = 'hidden';
+    leaf.style.transform = 'rotateY(0deg)';
+    leafShades[0].style.opacity = '0';
+    leafShades[1].style.opacity = '0';
+    if (clones[from].parentNode) pool.appendChild(clones[from]);
+    if (clones[to].parentNode) pool.appendChild(clones[to]);
+    if (!turn.ovHidden) hideOverlay();
+    crossfadeBase(contents[to], contents[from], 200);   // 底页换回当前页
+    pauseBase(to);                                      // 目标页未落地，停掉其缓冲
+    renderIdle();
+    turn = null;
+    mode = 'open';
+    updateDots(s);
+    updateMuteVis();
   }
 
   function finishTurn() {
@@ -1027,26 +1120,38 @@
     startTurn(dir, function () { setTimeout(stepFlip, 15); }, !last);
   }
 
-  /* ---------- 交互：点击 + 拖动 ---------- */
+  /* ---------- 交互：点击 + 拖动跟手翻页 ---------- */
   var dragging = false;
-  var downX = 0, downTime = 0, moved = false;
+  var downX = 0, downY = 0, downTime = 0, moved = false;
 
   book.addEventListener('pointerdown', function (e) {
     if (mode !== 'closed' && mode !== 'open') return;
     dragging = true;
     moved = false;
     downX = e.clientX;
+    downY = e.clientY;
     downTime = performance.now();
-    book.setPointerCapture(e.pointerId);
+    try { book.setPointerCapture(e.pointerId); } catch (err) {}
   });
 
   book.addEventListener('pointermove', function (e) {
-    if (dragging && Math.abs(e.clientX - downX) > 6) moved = true;
+    if (!dragging) return;
+    var dx = e.clientX - downX, dy = e.clientY - downY;
+    if (!moved) {
+      if (Math.abs(dx) <= 8 || Math.abs(dx) < Math.abs(dy)) return;  // 微小/纵向移动忽略
+      moved = true;
+      if (mode === 'open') {
+        var r0 = book.getBoundingClientRect();
+        beginLiveTurn(downX > r0.left + r0.width / 2 ? 1 : -1);
+      }
+    }
+    if (liveTurn) moveLiveTurn(e.clientX);   // 叶片跟手
   });
 
   function endDrag(e) {
     if (!dragging) return;
     dragging = false;
+    if (liveTurn) { endLiveTurn(e.clientX); return; }
     var dx = e.clientX - downX;
     var quick = performance.now() - downTime < 300;
 
