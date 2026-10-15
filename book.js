@@ -1017,7 +1017,7 @@
     var spine = rect.left + rect.width / 2;
     var c = Math.max(-1, Math.min(1, (clientX - spine) / (rect.width / 2)));
     var rot = -Math.acos(c) * 180 / Math.PI;
-    return liveTurn.dir > 0 ? (-rot / 180) : (1 + rot / 180);
+    return turn.dir > 0 ? (-rot / 180) : (1 + rot / 180);
   }
   function moveLiveTurn(clientX) {
     var q = Math.max(0, Math.min(1, liveQ(clientX)));
