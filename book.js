@@ -11,7 +11,10 @@
  *   - 叶片背面 = 目标页对应半页封面，落下时与底层完全衔接
  *   - 翻页结束：叶片收走，目标页视频从头开播
  *
- * 视频规则：到页自动静音播放（3/4/5 有声、默认静音，右下角半透明静音键全局互通），
+ * 视频规则：github.io 对 <video> 流式请求限速（只缓冲约 2 秒），改为整文件 fetch 成 blob
+ *           按页序预取（书页视频 → 全屏 6 → 完整视频），播本地源零卡顿；
+ *           没下完就翻到该页 → 转圈等下完自动开播，失败回退网络流。
+ *           到页自动静音播放（3/4/5 有声、默认静音，右下角半透明静音键全局互通），
  *           不循环、停尾帧；翻走即复位，每次翻回都从头播放（左右两页画面始终一致）；
  *           合书全部复位。
  * 片尾：5 播放至最后约 1.6 秒时整屏渐黑（5 不停，跟着全屏一起变黑），随后全屏播放 6；
@@ -347,11 +350,19 @@
     dotsBox.classList.remove('show');
     hint.classList.add('hidden');
     stage6.classList.add('show');
-    video6.preload = 'auto';
-    video6.load();       // 显式加载，避免 play() 与加载竞争被中断
     video6.muted = !soundOn;
-    tryPlay(video6);
-    warmFull();          // 6 起播后开始后台预加载完整视频
+    // 已整文件下载：换 blob 源零卡顿起播；还在下载则转圈等下完自动起播
+    if (video6.__blobUrl && video6.src !== video6.__blobUrl) {
+      try { video6.src = video6.__blobUrl; video6.load(); } catch (e) {}
+    }
+    if (video6.__blobPending && !video6.__blobUrl) {
+      fsLoad.classList.add('show');
+    } else {
+      video6.preload = 'auto';
+      video6.load();       // 显式加载，避免 play() 与加载竞争被中断
+      tryPlay(video6);
+    }
+    warmFull();          // 兜底：预取队列被跳过（慢网）时在此预载完整视频
     updateMuteVis();
   }
 
@@ -647,6 +658,16 @@
     var v = vBase[i];
     if (!v) return;
     if (v.ended) { try { v.currentTime = 0; } catch (e) {} }
+    // 已整文件下载到本地：换成 blob 源再播（本地播放零卡顿）
+    if (v.__blobUrl && v.src !== v.__blobUrl && v.paused) {
+      try { v.src = v.__blobUrl; v.load(); } catch (e) {}
+    }
+    // 整文件还在下载：不播网络流（避免只缓冲两秒就卡死），转圈等下完自动开播
+    if (v.__blobPending && !v.__blobUrl) {
+      v.__playWhenBlob = true;
+      showPageLoading(i, true);
+      return;
+    }
     v.muted = !(PAGES[i].sound && soundOn);
     tryPlay(v);
     warmAhead(i);
@@ -665,15 +686,83 @@
     var v = vBase[i];
     if (v) { v.pause(); try { v.currentTime = 0; } catch (e) {} }
   }
+  function showPageLoading(i, show) {
+    var d = contents[i] && contents[i].querySelector('.page-loading');
+    if (d) d.classList.toggle('show', !!show);
+  }
   // 按需升级缓冲：翻到该页（或开书到该页）时才开始拉视频数据
+  // 整文件预取（blob）进行中/已完成时不再重复拉网络流
   function warmBase(i) {
     var v = vBase[i];
-    if (v && v.preload !== 'auto') { v.preload = 'auto'; v.load(); }
+    if (v && v.preload !== 'auto' && !v.__blobPending && !v.__blobUrl) { v.preload = 'auto'; v.load(); }
   }
   // 预加载后面 1~2 页：翻到时已基本缓冲完，不再等加载
   function warmAhead(i) {
     warmBase(i + 1);
     warmBase(i + 2);
+  }
+
+  /* ---------- 整文件预取（blob） ----------
+   * github.io 对 <video> 的分段流式请求限速（只缓冲约 2 秒就卡住），
+   * 但整文件 GET 与直接点开链接一样正常。
+   * 策略：按页序把整个文件 fetch 下来存成 blob，播本地源 = 零卡顿；
+   * 没下完就翻到该页 → 转圈等待，下完自动开播；失败则回退网络流播放。
+   * 完整视频（33MB）排最后，避免抢占书页视频带宽。 */
+  var blobOrder = [], blobIdx = 0;
+  function onBlobReady(i) {
+    var v = vBase[i];
+    if (!v) return;
+    showPageLoading(i, false);
+    if (v.__playWhenBlob) {
+      v.__playWhenBlob = false;
+      if (s === i && !v.ended) playBase(i);
+    }
+  }
+  function fetchNextBlob() {
+    if (blobIdx >= blobOrder.length) {   // 书页视频全部就位
+      fetchVideo6Blob();                 // 再后台预取全屏 6
+      warmFull();                        // 最后才预载 33MB 完整视频
+      return;
+    }
+    var i = blobOrder[blobIdx++];
+    var v = vBase[i];
+    if (!v) { fetchNextBlob(); return; }
+    v.__blobPending = true;
+    fetch(PAGES[i].src)
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.blob(); })
+      .then(function (b) {
+        v.__blobPending = false;
+        v.__blobUrl = URL.createObjectURL(b);
+        onBlobReady(i);
+        fetchNextBlob();
+      })
+      .catch(function () {
+        v.__blobPending = false;   // 失败回退：该页走网络流（原有等待/补播兜底）
+        onBlobReady(i);
+        fetchNextBlob();
+      });
+  }
+  function startBlobQueue() {
+    if (slowNet()) return;   // 省流/2G/窄屏不预取
+    for (var i = 0; i < N; i++) if (PAGES[i].type === 'video') blobOrder.push(i);
+    fetchNextBlob();
+  }
+  // 全屏 6 同样整文件预取（排在书页视频之后）；已在 6 画面则下完自动起播
+  function fetchVideo6Blob() {
+    if (video6.__blobPending || video6.__blobUrl) return;
+    video6.__blobPending = true;
+    fetch(VIDEO6.src)
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.blob(); })
+      .then(function (b) {
+        video6.__blobPending = false;
+        video6.__blobUrl = URL.createObjectURL(b);
+        if (phase6 && video6.paused && !video6.ended && video6.src !== video6.__blobUrl) {
+          try { video6.src = video6.__blobUrl; video6.load(); } catch (e) {}
+          video6.muted = !soundOn;
+          tryPlay(video6);
+        }
+      })
+      .catch(function () { video6.__blobPending = false; });
   }
 
   // 视频页当前帧快照（作为叶片正面封面，与底层画面衔接）
@@ -980,15 +1069,13 @@
   book.addEventListener('pointercancel', endDrag);
   book.addEventListener('dragstart', function (e) { e.preventDefault(); });
 
-  /* ---------- 初始化：预载全部封面图；视频只取 metadata，翻到才升级缓冲 ---------- */
+  /* ---------- 初始化：预载全部封面图；视频整文件按序预取（blob），播本地源零卡顿 ---------- */
   setBaseContent(0);
   renderCover(0);
   updateMuteVis();
-  warmBase(0);           // 封面阶段就缓冲第一页视频，开书即播
-  warmBase(1);
-  // 页面加载完空闲 1.5 秒后开始后台预加载完整视频
-  if (document.readyState === 'complete') setTimeout(warmFull, 1500);
-  else window.addEventListener('load', function () { setTimeout(warmFull, 1500); });
+  // 页面加载完开始整文件预取：书页视频（0..5）→ 全屏 6 → 完整视频
+  if (document.readyState === 'complete') startBlobQueue();
+  else window.addEventListener('load', startBlobQueue);
   PAGES.forEach(function (p) {
     var a = new Image(); a.src = p.poster;
     if (p.type === 'image') { var b = new Image(); b.src = p.src; }
