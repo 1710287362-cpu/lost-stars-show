@@ -1010,10 +1010,12 @@
     liveTurn = { started: false };
   }
   // 指针 x → 本次翻页完成度 q（0..1）
+  // 叶片尖端位置 = 书脊 + 半宽·cos(转角)，令其等于指针位置解出转角：
+  // 指针在右缘=起始（前翻 0 / 回翻未完成），书脊=-90°，左缘=完成
   function liveQ(clientX) {
     var rect = book.getBoundingClientRect();
     var spine = rect.left + rect.width / 2;
-    var c = Math.max(-1, Math.min(1, (spine - clientX) / (rect.width / 2)));
+    var c = Math.max(-1, Math.min(1, (clientX - spine) / (rect.width / 2)));
     var rot = -Math.acos(c) * 180 / Math.PI;
     return liveTurn.dir > 0 ? (-rot / 180) : (1 + rot / 180);
   }
