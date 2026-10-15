@@ -103,7 +103,9 @@
   overlay.appendChild(ovPaper);
   overlay.appendChild(ovView);
 
+  var ovHideTimer = null;
   function showOverlay(dir) {
+    if (ovHideTimer) { clearTimeout(ovHideTimer); ovHideTimer = null; }
     overlay.className = 'half-overlay ' + (dir > 0 ? 'ov-left' : 'ov-right');
     overlay.style.transition = 'none';
     overlay.style.visibility = 'visible';
@@ -112,7 +114,9 @@
   function hideOverlay() {
     overlay.style.transition = 'opacity .12s ease';
     overlay.style.opacity = '0';
-    setTimeout(function () {
+    ovHideTimer = setTimeout(function () {
+      ovHideTimer = null;
+      if (overlay.style.opacity !== '0') return;   // 期间被重新显示（来回拖动）
       overlay.style.visibility = 'hidden';
       overlay.style.transition = 'none';
     }, 150);
@@ -1029,6 +1033,10 @@
     if (!turn.ovHidden && turn.q >= SWAP_Q) {
       turn.ovHidden = true;
       hideOverlay();
+    } else if (turn.ovHidden && turn.q < SWAP_Q - 0.04) {
+      // 不松手往回拖：退过阈值后把对侧半页恢复为当前页定格，画面跟随回退
+      turn.ovHidden = false;
+      showOverlay(turn.dir);
     }
     renderLeaf();
   }
