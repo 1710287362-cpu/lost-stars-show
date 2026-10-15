@@ -1002,12 +1002,14 @@
    * 松手时翻过 35% 就完成本次翻页（视频在翻页完成后才加载），否则退回取消。 */
   var liveTurn = null;
   function beginLiveTurn(dir) {
+    window.__blt = { entered: true, dir: dir, s: s, N: N, mode: mode, turn: !!turn, liveTurn: !!liveTurn };
     if (mode !== 'open' || liveTurn || turn) return;
     var to = s + dir;
     if (to < 0 || to > N - 1) return;    // 首页左侧/末页右侧保持原有触发（合书/进6）
     mode = 'turning';
     if (!prepareTurn(dir, to, false)) { mode = 'open'; return; }
     liveTurn = { started: false };
+    window.__blt.ok = true;
   }
   // 指针 x → 本次翻页完成度 q（0..1）
   // 叶片尖端位置 = 书脊 + 半宽·cos(转角)，令其等于指针位置解出转角：
